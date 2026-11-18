@@ -1,0 +1,21 @@
+import {test,expect} from '@playwright/test'
+
+test('多轮工具与核对修正后流式显示正文，生成期间与完成后都不回撤',async({page})=>{
+  await page.goto('/')
+  await page.evaluate(()=>{window.answerStates=[];window.answerVisibleDuringGeneration=false;new MutationObserver(()=>{const text=document.querySelector('.assistant-message:last-child .markdown')?.innerText||'';if(text&&document.querySelector('button[aria-label="停止生成"]'))window.answerVisibleDuringGeneration=true;if(window.answerStates.at(-1)!==text)window.answerStates.push(text)}).observe(document.querySelector('.chat-main'),{subtree:true,childList:true,characterData:true})})
+  await page.getByRole('textbox',{name:'向北极星提问'}).fill('连续展示验收：自动纠正核对，仅比较三位导师')
+  await page.getByRole('button',{name:'发送问题'}).click()
+  await expect(page.locator('.assistant-message .markdown')).toContainText('推荐付俊松、郭燕慧、杨文川三位')
+  await expect(page.getByRole('button',{name:'复制回答'})).toBeVisible({timeout:15000})
+  await expect(page.getByTestId('artifact')).toHaveCount(1)
+  const states=await page.evaluate(()=>window.answerStates),nonempty=states.filter(Boolean)
+  expect(nonempty.length).toBeGreaterThan(0)
+  const first=states.findIndex(Boolean)
+  expect(states.slice(first).every(text=>text.startsWith(nonempty[0]))).toBe(true)
+  expect(states.join('\n')).not.toContain('不应发布的工具前导')
+  expect(nonempty.length).toBeGreaterThan(1)
+  expect(await page.evaluate(()=>window.answerVisibleDuringGeneration)).toBe(true)
+  await expect(page.locator('.assistant-message .markdown')).toContainText('推荐付俊松、郭燕慧、杨文川三位')
+  await page.reload()
+  await expect(page.locator('.assistant-message .markdown')).toContainText('推荐付俊松、郭燕慧、杨文川三位')
+})

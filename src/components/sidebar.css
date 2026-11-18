@@ -1,0 +1,27 @@
+.sidebar-pane{position:relative;flex:0 0 auto;width:min(var(--sidebar-width,260px),max(200px,calc(100vw - 480px)));min-width:0;height:100%;overflow:hidden;background:var(--sidebar);transition:width 200ms cubic-bezier(.2,.75,.25,1)}
+.sidebar-pane.is-collapsed{width:0}
+.sidebar-pane::after{content:"";position:absolute;right:0;top:0;bottom:0;width:1px;background:var(--line);pointer-events:none}
+.sidebar-pane.is-collapsed::after{opacity:0}
+.sidebar-viewport{width:100%;min-width:200px;height:100%;opacity:1;transition:opacity 120ms ease}
+.sidebar-pane.is-collapsed .sidebar-viewport{opacity:0}
+.sidebar-pane .sidebar{position:static;width:100%;height:100%;border:0;transform:none;visibility:inherit;transition:none}
+.sidebar-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:25px}
+.sidebar-heading .brand{margin:0;min-width:0}
+.sidebar-mobile-close{display:none}
+.sidebar-resizer{position:absolute;inset:0 0 0 auto;width:10px;cursor:col-resize;touch-action:none;z-index:5;outline-offset:-3px}
+.sidebar-resizer::after{content:"";position:absolute;top:0;bottom:0;right:0;width:2px;background:var(--accent);opacity:0;transition:opacity 120ms ease}
+.sidebar-resizer:hover::after,.sidebar-resizer:focus-visible::after,.sidebar-pane[data-resizing] .sidebar-resizer::after{opacity:.65}
+.sidebar-pane.is-collapsed .sidebar-resizer{display:none}
+.sidebar-pane[data-resizing]{transition:none}
+.resizing-sidebar,.resizing-sidebar *{cursor:col-resize!important;user-select:none!important}
+.resizing-sidebar .sidebar-pane,.resizing-sidebar .sidebar-viewport{transition:none}
+.desktop-sidebar-toggle{display:inline-flex}
+@media(max-width:760px){
+ .sidebar-pane,.sidebar-pane.is-collapsed{position:fixed;inset:0 auto 0 0;width:min(320px,calc(100vw - 48px));z-index:40;transform:translateX(-100%);visibility:hidden;transition:transform 180ms cubic-bezier(.2,.75,.25,1),visibility 0s 180ms}
+ .sidebar-pane.mobile-open{transform:translateX(0);visibility:visible;transition:transform 180ms cubic-bezier(.2,.75,.25,1),visibility 0s}
+ .sidebar-pane .sidebar-viewport,.sidebar-pane.is-collapsed .sidebar-viewport{opacity:1}
+ .sidebar-pane .sidebar{padding:22px 14px 14px}
+ .sidebar-mobile-close{display:inline-flex}
+ .desktop-sidebar-toggle,.sidebar-resizer{display:none}
+}
+@media(prefers-reduced-motion:reduce){.sidebar-pane,.sidebar-viewport,.sidebar-resizer::after{transition:none}}

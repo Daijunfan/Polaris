@@ -1,0 +1,20 @@
+import {test,expect} from '@playwright/test'
+
+test('新增PDF评价参与四学院对话与真实比较表，来源保持可读且不暴露定位',async({page})=>{
+  await page.goto('/')
+  await page.getByRole('textbox',{name:'向北极星提问'}).fill('跨学院导入验收：比较四个学院的导师培养方式')
+  await page.getByRole('button',{name:'发送问题'}).click()
+  await expect(page.getByRole('button',{name:'复制回答'})).toBeVisible()
+  const answer=page.getByTestId('assistant-message')
+  for(const text of ['网络空间安全学院','计算机学院','软件学院','人工智能学院','左兴权','高慧','王小婕'])await expect(answer).toContainText(text)
+  expect(await answer.innerText()).not.toMatch(/PDFs\/|\.pdf|:P\d|sha256|source_locator|mentor_id/)
+  await page.getByRole('button',{name:'资料与来源'}).click()
+  const dialog=page.getByRole('dialog',{name:'资料与来源'})
+  await dialog.getByRole('textbox',{name:'查找资料来源'}).fill('人工智能学院')
+  await expect(dialog).toContainText('2026 人工智能学院导师评价')
+  await expect(dialog).toContainText('第三方评价')
+  expect(await dialog.innerText()).not.toMatch(/PDFs\/|\.pdf|:P\d|sha256|维护者补充/)
+  await page.keyboard.press('Escape')
+  await page.reload()
+  await expect(page.getByTestId('assistant-message')).toContainText('王小婕')
+})

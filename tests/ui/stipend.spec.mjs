@@ -1,0 +1,28 @@
+import {test,expect} from '@playwright/test'
+import fs from 'node:fs/promises'
+
+test('月劳务以金额或区间呈现，保持对齐与排序，复制和CSV不再称上下限',async({page})=>{
+  await page.addInitScript(()=>Object.defineProperty(navigator,'clipboard',{value:{writeText:async value=>{window.copiedAnswer=value}}}))
+  await page.goto('/')
+  await page.getByRole('textbox',{name:'向北极星提问'}).fill('劳务金额展示验收：比较导师的月劳务记录')
+  await page.getByRole('button',{name:'发送问题'}).click()
+  await expect(page.getByRole('button',{name:'复制回答'})).toBeVisible()
+  const artifact=page.getByTestId('artifact')
+  await expect(artifact).toContainText('月劳务（元）')
+  await expect(artifact).toContainText('500–1,200')
+  expect(await artifact.innerText()).not.toMatch(/月劳务[上下]限/)
+  await artifact.getByRole('button',{name:'表格',exact:true}).click()
+  const money=artifact.locator('thead th').filter({hasText:'月劳务（元）'})
+  await expect(money).toHaveCount(1)
+  await money.getByRole('button').click()
+  await expect(artifact.locator('tbody tr').first()).toContainText('王碧舳')
+  await page.getByRole('button',{name:'复制回答'}).click()
+  expect(await page.evaluate(()=>window.copiedAnswer)).not.toMatch(/月劳务[上下]限/)
+  const download=page.waitForEvent('download')
+  await artifact.getByRole('button',{name:/CSV/}).click()
+  const file=await download,text=await fs.readFile(await file.path(),'utf8')
+  expect(text).toContain('月劳务（元）');expect(text).toContain('500–1,200');expect(text).not.toMatch(/月劳务[上下]限/)
+  await page.reload()
+  await expect(page.getByTestId('artifact')).toContainText('月劳务（元）')
+  expect(await page.getByTestId('artifact').innerText()).not.toMatch(/月劳务[上下]限/)
+})

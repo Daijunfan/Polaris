@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.local/
+test-results/
+playwright-report/
+*.log
+.DS_Store
+._*
+tmp/
+PDFs/
+
+# Original records and plaintext mentor JSON stay on this machine; only encrypted .vault blobs are public.
+data/*.json
+*.xlsx
+*.zip
+*.tar.gz
+初试结果.md
+复试结果.md
+导师评价.md
+src/data/admissionData.js

@@ -1,0 +1,79 @@
+{
+  "name": "polaris-mentor",
+  "private": true,
+  "version": "5.0.0",
+  "description": "北极星 Polaris：读研选导师的 AI 参谋，真实评价、风险标签、导师对决与套磁",
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env server/index.mjs --dev",
+    "build": "vite build",
+    "start": "node --env-file-if-exists=.env server/index.mjs",
+    "preview": "npm start",
+    "cli": "node bin/mentor.mjs",
+    "data:build": "node scripts/build-data.mjs",
+    "data:seal": "node scripts/seal-data.mjs",
+    "data:import": "python3 scripts/import-pdf-reviews.py",
+    "data:crawl": "node scripts/crawl-web.mjs",
+    "test": "node --test tests/server.test.mjs tests/tools.test.mjs tests/web.test.mjs tests/trusted-answer.test.mjs tests/search.test.mjs tests/delivery.test.mjs tests/pdf-import.test.mjs tests/stipend-display.test.mjs tests/review-refresh.test.mjs tests/workbench.test.mjs tests/insights.test.mjs tests/cli-polish.test.mjs tests/multi-college-dossier.test.mjs tests/extreme-polish.test.mjs tests/quick-search-filters.test.mjs tests/vault-security.test.mjs",
+    "test:e2e": "vite build --outDir .local/ui-test-dist --emptyOutDir && playwright test",
+    "test:live": "node --env-file-if-exists=.env scripts/live-smoke.mjs",
+    "package": "node scripts/package-release.mjs",
+    "launch": "node scripts/start.mjs"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "bin": {
+    "polaris": "bin/mentor.mjs",
+    "mentor-buffet": "bin/mentor.mjs"
+  },
+  "license": "MIT",
+  "files": [
+    "bin",
+    "lib",
+    "server",
+    "src",
+    "data/dataset.vault",
+    "data/web-profiles.vault",
+    "data/web-seeds.vault",
+    "data/mentor-notes.vault",
+    "data/pdf-reviews.vault",
+    "scripts",
+    "tests",
+    "index.html",
+    "vite.config.js",
+    "playwright.config.mjs",
+    "DATA.md",
+    ".env.example",
+    ".github",
+    "public",
+    "docs/TOOLS.md",
+    "docs/AGENT.md",
+    "docs/RELEASE-CHECKLIST.md",
+    "start.cmd",
+    "start.command",
+    "docs/POLARIS-5.0.0.md",
+    "docs/images/polaris-welcome.png",
+    "docs/images/polaris-ranking.png",
+    "docs/images/polaris-dossier.png",
+    "docs/images/polaris-duel.png",
+    "docs/images/polaris-mobile.png",
+    "docs/images/polaris-share-card.png"
+  ],
+  "dependencies": {
+    "ajv": "8.20.0",
+    "lucide-react": "1.31.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.65.0",
+    "@vitejs/plugin-react": "6.0.5",
+    "cheerio": "^1.2.0",
+    "read-excel-file": "9.3.15",
+    "vite": "8.3.8"
+  }
+}
