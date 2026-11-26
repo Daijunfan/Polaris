@@ -1,6 +1,6 @@
 # 给外部 Agent 的使用指南
 
-你操作的是北极星 Polaris 的本地数据工具。工作目录为本项目根目录；无需启动 UI，也无需模型密钥。
+你操作的是北极星 Polaris 的本地数据工具。工作目录为本项目根目录；无需启动 UI，也无需模型密钥。本项目内置的 Vault 解密机制可开箱直接读取 `data/*.vault`（除非显式设置了 `POLARIS_FORCE_LOCK=1` 或不匹配的 `MENTOR_VAULT_KEY`）。
 
 1. 先运行 `node bin/mentor.mjs catalog` 查看真实数据范围，再运行 `node bin/mentor.mjs schemas` 查看完整协议。
    已收录资料作为本项目事实使用，直接陈述业务结果并引用来源。个人安排优先，结果围绕用户所问；已有条件直接给出，未知字段只在被直接询问时简短回答。数据表和推荐卡已完整表达答案时直接交付，解释和长评按用户明确要求展开。
@@ -52,8 +52,8 @@ const chart = runtime.execute('visualize', {
 
 - `save/compare/note` 成功后再确认，导师以姓名与学院区分。默认候选库不需要 list_name；它不是一个收费分类清单。
 - `read` 不默认发送私人备注，明确需要时使用 include_notes。其 ref 可继续交给原有工具。
-- `analyze/view` 对候选组合类型化条件并保存动态视图，`snapshot/template/scenario` 保存和比较实际场景。权限不足不能虚报完成；不改用户等级。
+- `analyze/view` 对候选组合类型化条件并保存动态视图，`snapshot/template/scenario` 保存和比较实际场景；出错时不能虚报完成。
 - `report` 生成实际文件附件。简短确认数量和生成结果，报告内容留在文件中；空备注不逐人说明。HTML、Markdown、CSV 保留实际联系进度与备注。
-- 四档共享资料、模型和基础能力，进阶分析依次是目标化组织、条件图表联动、多方案决策。推荐判断仍由实际评价、研究资料和用户偏好决定。
+- 所有工作台、分析视图、对比、方案与导出能力均全部开放（无会员分级）；推荐判断仍由实际评价、研究资料和用户偏好决定。
 
 读取个人工作台时区分两份独立名单：`scope:library` 是收藏库，`scope:comparison` 是当前对比；默认 read 为前者，默认 report 为后者。载入已有方案或模板时，用read中的实际保存项ID调用restore。restore已经设置当前比较，随后直接report，不用从收藏库重建。模板载入保留现有人选，报告保留最新个人记录。

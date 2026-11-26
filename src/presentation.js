@@ -1,4 +1,5 @@
-import { exportText, internalColumn, publicArtifact, publicMessage, publicSource, sourceNumber } from '../lib/presentation.js'
+import { exportText, formatDisciplineText, internalColumn, publicArtifact, publicMessage, publicSource, sourceNumber } from '../lib/presentation.js'
+export { formatDisciplineText }
 
 const statuses = {
   unique: ['可确认归属', '姓名与专业可唯一对应到这条记录。'],
@@ -74,4 +75,29 @@ export function messageMarkdown(message,{withSources=true}={}) {
   })
   const sources=[...(safe.sources||[]),...(safe.artifacts||[]).flatMap(artifact=>artifact.sources||[])]
   return [exportText(safe.content),...tables,withSources&&sources.length?`### 资料来源\n\n${sourcesMarkdown(sources)}`:null].filter(Boolean).join('\n\n')
+}
+
+export function formatAcademicSummary(value, title = '') {
+  if (value == null) return null
+  let text = String(value).replace(/\r\n?/g, '\n').trim()
+  if (!text) return null
+  const cleanTitle = String(title || '').trim()
+  text = text.replace(/^(?:职称|职务)[：:]\s*/u, '').trim()
+  if (cleanTitle) {
+    const escaped = cleanTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    text = text.replace(new RegExp(`^${escaped}(?:[；;：:,，·/]|\\s)+`, 'u'), '').trim()
+  }
+  text = text.replace(/^(?:教授级高级工程师|正高级工程师|高级工程师|特聘研究员|特聘副研究员|副研究员|研究员|副教授|教授|助理教授|讲师)[；;：:,，·/]\s*/u, '').trim()
+  if (!text || (cleanTitle && text === cleanTitle)) return null
+  return text
+}
+
+export function formatTableField(columnKey, rawText, mentorTitle = '') {
+  if (['doctoral_evidence', 'profile_evidence', 'admissions', 'directions', 'personal_directions', 'research_areas', 'direction_summary'].includes(columnKey)) {
+    return formatDisciplineText(rawText)
+  }
+  if (columnKey === 'academic_summary') {
+    return formatAcademicSummary(rawText, mentorTitle)
+  }
+  return rawText
 }

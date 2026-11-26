@@ -18,6 +18,26 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     open: false,
-    fs: { deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/.local/**', '**/*.xlsx', '**/*.zip', '**/data/dataset.json', '**/src/data/admissionData.js', '**/初试结果.md', '**/复试结果.md'] },
+    fs: {
+      deny: [
+        '.env',
+        '.env.*',
+        '*.{crt,pem}',
+        '**/*.{crt,pem,key}',
+        '**/.git/**',
+        '**/.local/**',
+        '**/*.vault',
+        '**/data/*.json',
+        '**/*.xlsx',
+        '**/*.zip',
+        '**/*.tar.gz',
+        '**/*.pdf',
+        '**/PDFs/**',
+        '**/src/data/admissionData.js',
+        '**/初试结果.md',
+        '**/复试结果.md',
+        '**/导师评价.md',
+      ],
+    },
   },
 })

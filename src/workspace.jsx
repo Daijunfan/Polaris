@@ -1,13 +1,11 @@
 import React,{createContext,useCallback,useContext,useEffect,useRef,useState} from 'react'
 import {api,downloadFile} from './api.js'
-import {planById} from '../lib/plans.js'
 
 const Context=createContext(null)
 export const useWorkspace=()=>useContext(Context)
 export function WorkspaceProvider({children}){
-  const [state,setState]=useState(null),[pending,setPending]=useState(0),[error,setError]=useState(''),[view,setView]=useState(null),[requiredTier,setRequiredTier]=useState(null),[message,setMessage]=useState('')
-  const queue=useRef(Promise.resolve()),current=useRef(null),previousView=useRef('library'),viewRef=useRef(null),mutationEpoch=useRef(0),activeMutations=useRef(0),needsRefresh=useRef(false)
-  viewRef.current=view
+  const [state,setState]=useState(null),[pending,setPending]=useState(0),[error,setError]=useState(''),[view,setView]=useState(null),[message,setMessage]=useState('')
+  const queue=useRef(Promise.resolve()),current=useRef(null),mutationEpoch=useRef(0),activeMutations=useRef(0),needsRefresh=useRef(false)
   const accept=useCallback(next=>{current.current=next;setState(next)},[])
   const refresh=useCallback(()=>{
     if(activeMutations.current){needsRefresh.current=true;return Promise.resolve()}
@@ -16,8 +14,8 @@ export function WorkspaceProvider({children}){
   },[accept])
   useEffect(()=>{refresh()},[refresh])
   useEffect(()=>{if(!message)return;const timer=setTimeout(()=>setMessage(''),3000);return()=>clearTimeout(timer)},[message])
-  const open=useCallback((next='library')=>{setError('');setRequiredTier(null);if(next==='membership')previousView.current=viewRef.current&&viewRef.current!=='membership'?viewRef.current:'library';setView(next)},[])
-  const fail=useCallback(e=>{setError(e.message);if(e.code==='PLAN_REQUIRED'){previousView.current=viewRef.current&&viewRef.current!=='membership'?viewRef.current:'library';setRequiredTier(e.requiredTier);setView('membership')}},[])
+  const open=useCallback((next='library')=>{setError('');setView(next)},[])
+  const fail=useCallback(e=>{setError(e.message)},[])
   const mutate=useCallback((path,method='POST',body)=>{
     mutationEpoch.current++;activeMutations.current++
     setPending(value=>value+1)
@@ -42,10 +40,9 @@ export function WorkspaceProvider({children}){
       await queue.current.catch(()=>{})
       const response=await fetch('/api/workbench/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format,snapshot,scope,keys})})
       if(!response.ok){const body=await response.json();throw Object.assign(new Error(body.error),body)}
-      const text=await response.text();downloadFile((scope==='library'?'导师候选库':snapshot?current.current?.snapshots.find(item=>item.id===snapshot)?.name||'导师对比报告':'导师对比报告').replace(/[\\/:*?"<>|]/g,'_')+'.'+format,text,response.headers.get('content-type'));setMessage('报告已下载')
+      const blob=await response.blob();downloadFile((scope==='library'?'导师候选库':snapshot?current.current?.snapshots.find(item=>item.id===snapshot)?.name||'导师对比报告':'导师对比报告').replace(/[\\/:*?"<>|]/g,'_')+'.'+format,blob,response.headers.get('content-type')||blob.type);setMessage('报告已下载')
     }catch(e){fail(e)}
   },[fail])
-  const requireFeature=()=>true
-  const value={state,pending:Boolean(pending),error,message,view,requiredTier,plan:state?planById():null,open,back:()=>setView(previousView.current),close:()=>setView(null),setView,setError,setMessage,refresh,mutate,saveMentor,addCompare,exportReport,fail,requireFeature}
+  const value={state,pending:Boolean(pending),error,message,view,open,close:()=>setView(null),setView,setError,setMessage,refresh,mutate,saveMentor,addCompare,exportReport,fail}
   return <Context.Provider value={value}>{children}</Context.Provider>
 }

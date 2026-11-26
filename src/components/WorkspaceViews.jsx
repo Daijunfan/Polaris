@@ -1,7 +1,7 @@
 import {APP_NAME,APP_SLOGAN,APP_TAGLINE} from '../../lib/brand.js'
 import React, { forwardRef, memo, useEffect, useState } from 'react'
 import { ArrowDown, ArrowRight, ArrowUp, Bookmark, ChevronRight, Coins, LoaderCircle, MessageSquare, Pencil, Plus, Search, Settings2, SlidersHorizontal, Square, Trash2, X } from 'lucide-react'
-import { compactNumber } from '../presentation.js'
+import { compactNumber, effortLabel } from '../presentation.js'
 import { tokenNumber } from '../api.js'
 import { AgentMark } from './Message.jsx'
 import SidebarPane from './SidebarPane.jsx'
@@ -38,9 +38,9 @@ export const Sidebar = memo(function Sidebar({ chats, chatId, usage, configured,
   </aside></SidebarPane>
 })
 
-export function Welcome({ data, failed = false, mentorCount = 0, savedCount = 0, compareCount = 0, isMac = false, onOpenMentors, onOpenLibrary, children }) {
+export function Welcome({ data, failed = false, mentorCount = 0, savedCount = 0, compareCount = 0, isMac = false, vaultLocked = false, configured, onOpenSettings, onOpenMentors, onOpenLibrary, children }) {
   const counts=data?.metadata?.counts
-  const totalMentors=mentorCount||1309
+  const effectiveLocked=vaultLocked||(data!=null&&(counts?.mentors??0)===0&&!(data.sources?.length))
   return <>
     <div className="start-heading">
       <div className="start-dataset"><span>{APP_TAGLINE}</span>{data&&<span>北京邮电大学 {data.metadata.colleges.length} 个精评学院<span className="dataset-dot">·</span>{counts.mentors} 位评价导师<span className="dataset-dot">·</span>{counts.reviews} 条评价归纳{counts.web_profiles>0&&<><span className="dataset-dot">·</span>全校 {data.metadata.profile_colleges?.length||14} 院 {counts.web_profiles} 份官网档案</>}</span>}</div>
@@ -48,11 +48,12 @@ export function Welcome({ data, failed = false, mentorCount = 0, savedCount = 0,
       <p className="start-sub">优点、风险、实际谁带、能不能实习——一句话问清，每个结论都有评价依据与出处。</p>
     </div>
     {children}
+    {configured===false&&<div className="start-onboarding-chip" role="note" aria-label="模型未配置提示"><span>尚未配置大模型 API</span><button type="button" className="text-button" onClick={onOpenSettings}>立即填写 API Key →</button></div>}
     {!data?<p className="start-status" role="status">{failed ? '资料未加载' : '加载中…'}</p>:<section className="core-hub" aria-label="导师与候选入口">
       <button type="button" className="core-card" onClick={onOpenMentors}>
         <div className="core-card-top">
           <span className="core-card-icon"><Search size={16} aria-hidden="true"/></span>
-          <span className="core-card-tag">全校 {totalMentors} 位导师档案</span>
+          <span className="core-card-tag">{effectiveLocked ? '数据库已加密锁定' : mentorCount > 0 ? `全校 ${mentorCount} 位导师档案` : '全校导师档案'}</span>
           <kbd aria-hidden="true">{isMac?'⌘K':'Ctrl K'}</kbd>
         </div>
         <div className="core-card-body">
@@ -86,7 +87,7 @@ export const Composer = forwardRef(function Composer({ chat, config, colleges=[]
       <textarea ref={ref} aria-label={`向${APP_NAME}提问`} aria-busy={loading} placeholder={loading?'载入对话…':continuing?'继续问，比如“第二位有什么坑？”':'问任何关于导师的问题，比如“不打卡还能实习的老师有哪些？”'} rows={continuing?1:2} value={text} maxLength={20000} disabled={!config||loading} onChange={e => onText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); onSend() } }}/>
       <div className="composer-bottom">
         {showLatest?<button type="button" className="composer-latest" onClick={onLatest} aria-label="回到最新消息"><ArrowDown size={14}/><span>最新消息</span></button>:busy&&text.trim()?<span className="composer-hint" role="status">草稿已保留，回答结束后可发送</span>:<span className="composer-shortcut"><kbd>Enter</kbd> 发送<span>·</span><kbd>Shift + Enter</kbd> 换行</span>}
-        <div className="composer-actions">{config?.configured && <button type="button" className="context-button" aria-label="上下文与压缩设置" onClick={onExecution} title={`输入 ${tokenNumber(tokens)} Token · 压缩阈值 ${tokenNumber(threshold)} Token`}><SlidersHorizontal size={12}/><span>上下文 {compactNumber(tokens)} / {compactNumber(config.contextWindow)}</span></button>}{busy ? <button type="button" className="send-button stop-button" aria-label="停止生成" title="停止生成" disabled={stopping} onClick={onStop}>{stopping ? <LoaderCircle className="spin" size={17}/> : <Square size={12} fill="currentColor"/>}</button> : <button className="send-button" type="submit" disabled={!text.trim() || !config||loading} aria-label="发送问题" title="发送（Enter）"><ArrowUp size={18}/></button>}</div>
+        <div className="composer-actions">{config?.configured && <button type="button" className="context-button" aria-label="上下文与压缩设置" onClick={onExecution} title={`推理 · ${effortLabel(config.reasoningEffort || 'off')} · 输入 ${tokenNumber(tokens)} Token · 压缩阈值 ${tokenNumber(threshold)} Token`}><SlidersHorizontal size={12}/><span><span className="context-reasoning-label">推理·{effortLabel(config.reasoningEffort || 'off')} · </span>上下文 {compactNumber(tokens)} / {compactNumber(config.contextWindow)}</span></button>}{busy ? <button type="button" className="send-button stop-button" aria-label="停止生成" title="停止生成" disabled={stopping} onClick={onStop}>{stopping ? <LoaderCircle className="spin" size={17}/> : <Square size={12} fill="currentColor"/>}</button> : <button className="send-button" type="submit" disabled={!text.trim() || !config||loading} aria-label="发送问题" title="发送（Enter）"><ArrowUp size={18}/></button>}</div>
       </div>
     </form>
   </div>

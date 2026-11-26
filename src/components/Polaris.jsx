@@ -101,7 +101,7 @@ export async function renderShareCard({title,rows,lookup,profile,match}){
   if(document.fonts?.ready){try{await document.fonts.ready}catch{}}
   const W=1080,H=1350,canvas=document.createElement('canvas'),context=canvas.getContext('2d')
   canvas.width=W;canvas.height=H
-  const font=(size,weight=500)=>`${weight} ${size}px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif`
+  const font=(size,weight=400)=>`${weight} ${size}px "PingFang SC","Microsoft YaHei UI","Microsoft YaHei","Hiragino Sans GB","Segoe UI",system-ui,-apple-system,sans-serif`
   const sky=context.createLinearGradient(0,0,W,H);sky.addColorStop(0,'#f8fafc');sky.addColorStop(0.55,'#f1f6fe');sky.addColorStop(1,'#e8f1ff')
   context.fillStyle=sky;context.fillRect(0,0,W,H)
   const topBar=context.createLinearGradient(0,0,W,0);topBar.addColorStop(0,'#1d4b8f');topBar.addColorStop(0.6,'#2563eb');topBar.addColorStop(1,'#0d9488')
@@ -110,10 +110,10 @@ export async function renderShareCard({title,rows,lookup,profile,match}){
   context.fillStyle=tile;roundRect(context,72,64,68,68,18);context.fill()
   context.save();context.translate(82,74);context.scale(1.5,1.5);context.fillStyle='#fbbf24';context.fill(new Path2D(STAR_PATH));context.restore()
   context.fillStyle='#0f172a';context.font=font(38,700);context.fillText(APP_NAME,160,104)
-  context.fillStyle='#4b5869';context.font=font(22);context.fillText(`${APP_EN} · 评价归纳择导卡`,160,136)
+  context.fillStyle='#4b5869';context.font=font(22,400);context.fillText(`${APP_EN} · 评价归纳择导卡`,160,136)
   const dateStr=new Date().toLocaleDateString('sv-SE'),safeRows=Array.isArray(rows)?rows:[],list=safeRows.slice(0,6)
   const countNote=safeRows.length>list.length?`展示前 ${list.length} / 共 ${safeRows.length} 位`:`共 ${safeRows.length} 位候选`
-  context.fillStyle='#556274';context.font=font(20,500);context.textAlign='right';context.fillText(`${dateStr} · ${countNote}`,W-72,108);context.textAlign='left'
+  context.fillStyle='#556274';context.font=font(20,400);context.textAlign='right';context.fillText(`${dateStr} · ${countNote}`,W-72,108);context.textAlign='left'
   context.fillStyle='#0f172a';context.font=font(46,700)
   let y=220
   const titleLines=wrap(context,String(title||'导师推荐名单'),W-144)
@@ -154,7 +154,7 @@ export async function renderShareCard({title,rows,lookup,profile,match}){
       context.textAlign='right';context.fillText(stars,rightEdge,top+44);context.textAlign='left'
       rightEdge-=context.measureText(stars).width+16
     }
-    if(mScore){context.font=font(19,650);const mLabel=`契合 ${mScore.score}%`,mw=context.measureText(mLabel).width+24;context.fillStyle=mScore.score>=75?'#eaf7f0':'#fef9ec';roundRect(context,rightEdge-mw,top+19,mw,32,16);context.fill();context.fillStyle=mScore.score>=75?'#146c43':'#854d0e';context.fillText(mLabel,rightEdge-mw+12,top+41);rightEdge-=mw+14}
+    if(mScore){context.font=font(19,700);const mLabel=`契合 ${mScore.score}%`,mw=context.measureText(mLabel).width+24;context.fillStyle=mScore.score>=75?'#eaf7f0':'#fef9ec';roundRect(context,rightEdge-mw,top+19,mw,32,16);context.fill();context.fillStyle=mScore.score>=75?'#146c43':'#854d0e';context.fillText(mLabel,rightEdge-mw+12,top+41);rightEdge-=mw+14}
     context.fillStyle='#0f172a';context.font=font(33,700)
     const safeName=fitText(context,row.name||row.mentor_name||'导师',Math.max(120,rightEdge-240))
     context.fillText(safeName,164,top+46)
@@ -166,12 +166,12 @@ export async function renderShareCard({title,rows,lookup,profile,match}){
       metaX+=dw+12
     }
     const rawCollege=row.college||insight?.college||''
-    context.fillStyle='#4b5869';context.font=font(21,500)
+    context.fillStyle='#4b5869';context.font=font(21,400)
     if(rawCollege&&metaX<rightEdge-40)context.fillText(fitText(context,rawCollege,rightEdge-metaX-12),metaX,top+44)
     let x=164,flagY=top+64
     const flags=insight?[...insight.flags.filter(flag=>flag.tone==='bad'),...insight.flags.filter(flag=>flag.tone==='good')]:[]
     if(flags.length){
-      context.font=font(18.5,600)
+      context.font=font(18,600)
       for(const flag of flags){
         const w=context.measureText(flag.label).width+24
         if(x+w>W-80&&x>164){

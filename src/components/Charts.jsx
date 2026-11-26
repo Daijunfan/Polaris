@@ -7,6 +7,7 @@ import { columnLabel, display, internalColumn, resultTitle,csvText } from '../pr
 import Dialog from './Dialog.jsx'
 import { mentorRanking, publicArtifact, sourceName } from '../../lib/presentation.js'
 import SourceLinks from './SourceLinks.jsx'
+import ExportMenu from './ExportMenu.jsx'
 export { default as DataTable } from './DataTable.jsx'
 
 const palette = ['#1d4b8f', '#0d9488', '#d97706', '#7c3aed', '#e11d48', '#0284c7', '#4f46e5', '#059669']
@@ -204,13 +205,14 @@ export default memo(function Artifact({ artifact: original, onSources }) {
     const ns = 'http://www.w3.org/2000/svg', width = element.viewBox.baseVal.width, height = element.viewBox.baseVal.height
     const root = document.createElementNS(ns, 'svg'), canvas = document.createElement('canvas'), measure = canvas.getContext('2d')
     root.setAttribute('xmlns', ns)
+    const svgFont='"PingFang SC","Microsoft YaHei UI","Microsoft YaHei","Hiragino Sans GB","Segoe UI",system-ui,-apple-system,sans-serif'
     function text(value, x, y, size = 11, color = '#4b5869', bold = false) {
       const node = document.createElementNS(ns, 'text'); node.setAttribute('x', x); node.setAttribute('y', y); node.setAttribute('font-size', size); node.setAttribute('fill', color)
       if (bold) node.setAttribute('font-weight', '600')
       node.textContent = value; root.append(node)
     }
     function lines(value, size) {
-      measure.font = `${size}px system-ui`
+      measure.font = `${size}px ${svgFont}`
       const result = []; let line = ''
       for (const character of value) { if (line && measure.measureText(line + character).width > width - 36) { result.push(line); line = '' }; line += character }
       if (line) result.push(line)
@@ -222,14 +224,14 @@ export default memo(function Artifact({ artifact: original, onSources }) {
     let x = 18
     const legends=colors?(colors.numeric?[]:colors.entries.map(e=>({label:`${colors.label}：${e.label}`,color:e.color}))):artifact.range?[{label:artifact.range.label,color:palette[0]}]:artifact.y.map((key,i)=>({label:label(key),color:palette[i % palette.length]}))
     if(colors?.numeric) {
-      const name=`${colors.label} · ${display(colors.min)}`;measure.font='11px system-ui';text(name,x,y);x+=measure.measureText(name).width+12
+      const name=`${colors.label} · ${display(colors.min)}`;measure.font=`11px ${svgFont}`;text(name,x,y);x+=measure.measureText(name).width+12
       const defs=document.createElementNS(ns,'defs'),gradient=document.createElementNS(ns,'linearGradient');gradient.setAttribute('id','value-scale');gradient.setAttribute('x1','0%');gradient.setAttribute('x2','100%')
       for(const [offset,value] of [['0%',colors.min],['100%',colors.max]]){const stop=document.createElementNS(ns,'stop');stop.setAttribute('offset',offset);stop.setAttribute('stop-color',colors.color(value));gradient.append(stop)}
       defs.append(gradient);root.append(defs)
       const ramp=document.createElementNS(ns,'rect');ramp.setAttribute('x',x);ramp.setAttribute('y',y-8);ramp.setAttribute('width','90');ramp.setAttribute('height','8');ramp.setAttribute('rx','2');ramp.setAttribute('fill','url(#value-scale)');root.append(ramp);text(display(colors.max),x+98,y)
     }
     for (let i = 0; i < legends.length; i++) {
-      const name = legends[i].label; measure.font = '11px system-ui'; const span = measure.measureText(name).width + 30
+      const name = legends[i].label; measure.font = `11px ${svgFont}`; const span = measure.measureText(name).width + 30
       if (x + span > width - 18) { x = 18; y += 20 }
       const swatch = document.createElementNS(ns, 'rect'); swatch.setAttribute('x', x); swatch.setAttribute('y', y - 8); swatch.setAttribute('width', '7'); swatch.setAttribute('height', '7'); swatch.setAttribute('rx', '2'); swatch.setAttribute('fill', legends[i].color); root.append(swatch)
       text(name, x + 13, y, 11); x += span
@@ -247,7 +249,7 @@ export default memo(function Artifact({ artifact: original, onSources }) {
     const sourceText = artifact.sources.map(s => s.year ? `${sourceName(s)} · ${s.year}` : sourceName(s)).join(' / ')
     text(`${shown < artifact.rows.length ? `显示 ${shown}/${artifact.rows.length} 条记录 · ` : ''}${sourceText ? `来源：${sourceText}　|　` : ''}${APP_NAME}`, 18, y + height + 17, 10)
     const style = document.createElementNS(ns, 'style')
-    style.textContent = 'text{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",system-ui,sans-serif}.chart-axis{font-size:11px;fill:#4b5869}.chart-grid-line{stroke:#e2e8f0;stroke-dasharray:3 4}.chart-value{font-size:12px;font-weight:600;fill:#0f172a}.chart-category{font-size:13px;fill:#334155}'
+    style.textContent = `text{font-family:${svgFont}}.chart-axis{font-size:11px;fill:#4b5869}.chart-grid-line{stroke:#e2e8f0;stroke-dasharray:3 4}.chart-value{font-size:12px;font-weight:600;fill:#0f172a}.chart-category{font-size:13px;fill:#334155}`
     root.prepend(style)
     downloadFile(`${artifact.title}.svg`, root.outerHTML, 'image/svg+xml;charset=utf-8')
   }
@@ -255,6 +257,7 @@ export default memo(function Artifact({ artifact: original, onSources }) {
     <div className="artifact-header"><div className="artifact-title"><span className="artifact-icon">{artifact.type === 'table' ? <Table2 size={16}/> : <ChartNoAxesCombined size={16}/>}</span><h3>{mentorRanking(artifact)?resultTitle(artifact):artifact.title}{mentorRanking(artifact)&&<small className="artifact-count">{artifact.rows.length} 位</small>}</h3></div><div className="artifact-actions">
       {artifact.type !== 'table' && <div className="view-switch" role="group" aria-label="结果视图"><button className={!dataView ? 'selected' : ''} aria-pressed={!dataView} onClick={() => setDataView(false)}>{artifact.type==='metric'?'指标':'图表'}</button><button className={dataView ? 'selected' : ''} aria-pressed={dataView} onClick={() => setDataView(true)}>数据</button></div>}
       <button className="icon-button" aria-label={`${artifact.type==='table'?'展开表格':'放大图表'} ${artifact.title}`} title={artifact.type==='table'?'展开表格':'放大图表'} onClick={() => setExpanded(dataView?'data':'chart')}><Maximize2 size={14}/></button>
+      <ExportMenu variant="icon" ariaLabel={`多格式导出 ${artifact.title}`} title="导出 Excel / PDF / Word / MD" getPayload={format => ({ kind: 'artifact', format, artifacts: [table], title: artifact.title })} />
       <button className="icon-button" aria-label={`下载 ${artifact.title} CSV`} title="下载 CSV 数据" onClick={() => exportCSV(table)}><Download size={15}/></button>
     </div></div>
     {artifact.description && <p className="artifact-description">{artifact.description}</p>}

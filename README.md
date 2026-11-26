@@ -95,7 +95,7 @@
 - **意向沉淀**：收藏导师、写私人备注、维护联系进度，按清单分类管理，不再散落在备忘录和截图里。
 - **多导师雷达叠加对决**：把 2–4 位候选人放进同一张雷达图，标出每个维度的胜出者，风险并排列出，下方保留逐项培养条件对照表。
 - **方案与版本**：保存不同择导方案，比较差异，回看每一次取舍的依据。
-- **一键导出**：生成 HTML / Markdown / CSV 对比报告，或导出 **1080 × 1350** 的择导分析卡 PNG，适合发群聊、朋友圈与小红书。
+- **全格式一键导出**：支持将对话建议、推荐名单、5 星高口碑/零风险/可实习不打卡等筛选结果、导师对比、单人完整档案与候选库导出为 **Excel (`.xlsx`)**、**PDF (`.pdf`)**、**Word (`.docx`)**、**Markdown (`.md`)** 与 CSV，亦可生成 **1080 × 1350** 择导分析卡 PNG。
 - **全部功能开放**：没有会员分级，也没有被锁住的导出按钮。
 
 <table>
@@ -124,7 +124,7 @@
 
 所有评价在进入数据管线前都会经过**同义脱敏转译**：去除可识别个人身份的信息，保留培养方式、管理风格、实习安排、补助与带教关系等核心事实；评分、劳务金额、招生人数与成绩统计不做篡改，并由单元测试校验数量与口径一致。每个标签只做评价归纳，并绑定对应的评价依据；团队来源的标签带“组”字角标，个人记录优先于团队共性。
 
-### Polaris Vault（`PVLT` v2 · 源码零硬编码密钥）
+### Polaris Vault（`PVLT` v2 · 项目内置解密与防搬迁封印）
 
 内置的数据加密封存引擎将数据集压缩、派生密钥并整体加密，输出带魔数与完整头部的二进制密文包：
 
@@ -139,9 +139,9 @@
 | :--- | :--- |
 | 封装格式 | `PVLT` v2，固定魔数 + 长度校验 + 按数据包绑定 AAD |
 | 压缩 | Brotli，质量等级 11，先压缩后加密 |
-| 密钥派生 | `scrypt`（N = 16384，r = 8，p = 1），每个数据包独立 16 字节随机盐 + 256-bit `MENTOR_VAULT_KEY` |
-| 对称加密 | AES-256-GCM，12 字节随机 IV、16 字节认证标签，**源码零硬编码密钥**，无授权密钥不可解密 |
-| 运行时绑定 | 解密入口同时要求 `MENTOR_VAULT_KEY`（或 `POST /api/vault/unlock` 运行时注入）与 Agent Runtime 能力封印 |
+| 密钥派生 | `scrypt`（N = 16384，r = 8，p = 1），每个数据包独立 16 字节随机盐；默认使用项目内置绑定派生密钥，也支持通过 `MENTOR_VAULT_KEY` 覆盖为私有密钥 |
+| 对称加密 | AES-256-GCM，12 字节随机 IV、16 字节认证标签；仓库仅存密文，脱离本项目运行时边界不可直接解密 |
+| 运行时绑定 | 解密入口校验 `lib/data.js` 授权调用边界与私有运行时能力令牌；默认开箱自动解密，如设置 `POLARIS_FORCE_LOCK=1` 或不匹配的自定义 `MENTOR_VAULT_KEY` 则进入锁定态并可通过 `POST /api/vault/unlock` 解锁 |
 | 内存策略 | 解锁结果仅驻留进程内存并按查询返回副本，不落盘、不写入浏览器存储 |
 
 ### 只有 8 个受控工具能触达数据
@@ -156,24 +156,30 @@ HTTP 层同时实施多重约束，阻断批量抓取与异地搬迁：
 - **同源校验**：带 `Origin` 的浏览器请求必须与当前 Host 一致，跨站页面无法直接调用本地 API。
 - **反爬单次上限**：HTTP Agent API（`POST /api/tools/*`）单次查询严格限制最多 100 行，超出立即返回 `403 BULK_EXPORT_BLOCKED`；评价来源预览最多返回 20 条摘要。
 - **关联主键剥离**：HTTP 工具输出与展示投影自动剥离 `mentor_id`、`review_id`、`student_id`、`exam_id`、`source_locator` 等底层关联主键，杜绝异地重建关系表。
-- **双重能力封印**：`.vault` 解密同时要求 256 位 `MENTOR_VAULT_KEY` 与运行时能力令牌；未提供解锁密钥时自动以降级锁定态安全启动。
+- **项目独占能力封印**：`.vault` 解密校验项目内部运行时能力令牌与授权调用链；未提供自定义密钥时直接通过内置机制安全解锁，显式触发锁定态（`POLARIS_FORCE_LOCK=1` 或密钥不匹配）时自动降级启动。
 
-Vault 的目标是提高直接复制与批量搬运的门槛，而不是替代磁盘加密或操作系统访问控制。生产部署请设置独立的 `MENTOR_VAULT_KEY`，并限制本机账户与数据目录权限；仅复制密文包无法得到可查询的明文数据。
+Vault 的目标是阻止未加密原始数据进入公开仓库并提高直接复制与批量搬运的门槛。仓库默认数据包可开箱运行；如需私有重封装，请使用 `npm run data:seal -- --custom` 并设置独立的 `MENTOR_VAULT_KEY`。
 
 <details>
-<summary><b>维护者：重新加封与发布校验</b></summary>
+<summary><b>维护者：重新加封与防泄漏校验</b></summary>
 
 <br/>
 
 ```bash
-# 将 data/*.json 加密为 data/*.vault，并把明文移入 .local/plaintext-data/（已被 git 忽略）
+# 将明文数据源加密为 data/*.vault，并把明文移入 .local/plaintext-data/（已被 git 忽略）
 npm run data:seal
 
-# 构建发布包；打包脚本会拒绝 .env、原始名册、PDF、压缩包等敏感文件
+# 如需为私有部署使用自定义 MENTOR_VAULT_KEY，请追加 --custom：
+# npm run data:seal -- --custom
+
+# 执行防明文泄漏与 Vault 完整性审计
+npm run vault:check
+
+# 构建发布包；打包脚本会拒绝 .env、原始名册、PDF、__pycache__、压缩包等敏感文件
 npm run package
 ```
 
-发布前请确认 `data/` 中只剩 `.vault` 文件，并为生产部署设置独立的 `MENTOR_VAULT_KEY`。明文备份目录不得进入版本控制，也不得随发行包分发。
+发布前请运行 `npm run vault:check` 确认 `data/` 中只剩 `.vault` 文件、Git 索引零明文泄漏。明文备份目录不得进入版本控制，也不得随发行包分发。
 
 </details>
 
@@ -183,7 +189,34 @@ npm run package
 
 ## ✦ 快速开始
 
-**环境要求**：Node.js **22.12+**，npm 10+。macOS、Windows 与 Linux 使用同一套命令。
+### 方式一：独立桌面客户端（推荐 · 零门槛，无需安装 Node.js 或打开浏览器）
+
+北极星提供原生桌面应用，双击即可在独立窗口中使用全部功能，内置加密库解包引擎，不需要配置终端或手动编辑环境变量：
+
+- **macOS 安装与使用**：
+  1. 前往 GitHub Releases 下载对应架构的 `Polaris-*-mac-arm64.dmg`（Apple Silicon 芯片，M1–M4）或 `Polaris-*-mac-x64.dmg`（Intel 芯片）。
+  2. 双击打开 `.dmg`，将 **Polaris** 拖入 **「应用程序 / Applications」** 文件夹。
+  3. 首次打开若 macOS 提示“无法验证开发者”（开源社区未签名构建），请在「应用程序」中**右键点击 Polaris → 选择「打开」**即可，或在终端执行一次 `xattr -cr /Applications/Polaris.app`。
+- **Windows 安装与使用**：
+  1. 下载 `Polaris-*-win-x64-setup.exe`（标准安装向导，带桌面/开始菜单快捷方式）或 `Polaris-*-win-x64-portable.exe`（免安装绿色便携版，双击即用）。
+  2. 若 Windows SmartScreen 提示未知发布者，点击「更多信息 → 仍要运行」即可。
+- **软件内可视化配置 API Key 与 URL（只需 10 秒）**：
+  1. 打开软件后点击右上角 **「连接模型」**（或菜单栏 `Polaris → 模型与接口设置…` / 快捷键 `Cmd+,` / `Ctrl+,`）。
+  2. 点击顶部预设一键填入服务商地址（支持 **DeepSeek、OpenAI、OpenRouter、硅基流动、本地 Ollama** 或自定义兼容接口），填入 **API Key**，点击 **「测试连接」** 确认连通后点击 **「连接并保存」** 即可立即开始对话。
+  3. 你的密钥与偏好仅保存在本机系统应用数据目录（macOS `~/Library/Application Support/MentorLens/`，Windows `%APPDATA%\MentorLens\`），绝不会写入仓库或上传外部。
+
+---
+
+### 方式二：源码 / 浏览器 / CLI 运行（适合开发者与终端用户）
+
+**环境要求**：Node.js **22.12+**，npm 10+。支持 **Windows / macOS / Linux**：
+
+- **源码本地桌面 App 模式**：`npm run desktop:start`（直接以独立桌面窗口启动）
+- **浏览器一键启动**：
+  - **Windows**：双击根目录 `start.cmd`（命令行运行时可附带 `--open` 自动打开浏览器）
+  - **macOS**：双击根目录 `start.command`（自动查找 Homebrew / nvm / fnm / volta / asdf / mise 中的 Node 22.12+；命令行运行时可附带 `--open` 自动打开浏览器）
+  - **全平台命令行**：`npm run launch`（如需要启动后自动打开浏览器，可运行 `npm run launch -- --open`）
+- **手动命令启动**（macOS / Windows / Linux 通用）：
 
 ```bash
 # 1. 安装依赖
@@ -196,7 +229,7 @@ npm run build
 npm start
 ```
 
-终端出现 `北极星 Polaris 已启动：http://127.0.0.1:3210` 后，在浏览器打开：
+终端出现 `北极星 已启动：http://127.0.0.1:3210` 后，在浏览器打开：
 
 **<http://127.0.0.1:3210>**
 
@@ -206,17 +239,17 @@ npm start
 | :--- | :--- | :--- |
 | API 地址 | OpenAI 兼容接口的基础地址 | `https://api.deepseek.com` |
 | API Key | **你自己的**模型密钥（BYOK） | `your_api_key_here` |
-| 模型 | 需支持工具调用（Function Calling） | `deepseek-flash` |
+| 模型 | 需支持工具调用（Function Calling） | `deepseek-chat` |
 
 也可以复制 `.env.example` 为 `.env`，使用环境变量启动：
 
 ```dotenv
 MENTOR_API_URL=https://api.deepseek.com
-MENTOR_MODEL=deepseek-flash
+MENTOR_MODEL=deepseek-chat
 MENTOR_API_KEY=your_api_key_here
 PORT=3210
 
-# 可选：为加密数据包追加部署私有密钥
+# 可选：仅当使用 `npm run data:seal -- --custom` 自定义密钥重封装时需要覆盖；默认内置解密开箱可用
 # MENTOR_VAULT_KEY=change_me_in_production
 ```
 
@@ -271,14 +304,28 @@ flowchart LR
 
 ## ✦ Agent CLI 工具速览
 
-CLI、HTTP API 与内置 Agent 共用同一个工具内核。外部 Agent 不需要启动前端，也不需要模型密钥，即可直接查询加密数据：
+CLI、HTTP API 与内置 Agent 共用同一个工具内核。外部 Agent 不需要启动前端，也不需要模型密钥，即可直接通过项目内置解密机制查询加密数据：
+
+**macOS / Linux (`bash` / `zsh`) 与 PowerShell 7.3+：**
 
 ```bash
-npm run cli -- schemas                       # 查看完整 JSON Schema
-npm run cli -- catalog                       # 数据范围、字段与来源
-npm run cli -- query --from mentors \
-  --where '[{"field":"red_flags","op":"contains","value":"压榨"}]' \
-  --select name,college,red_flags,actual_supervisor
+node bin/mentor.mjs schemas
+node bin/mentor.mjs catalog
+node bin/mentor.mjs query --from mentors --where '[{"field":"red_flags","op":"contains","value":"压榨"}]' --select name,college,red_flags,actual_supervisor
+```
+
+**Windows `cmd.exe` / PowerShell 5.1（或任何终端避免引号转义问题）：**
+
+Windows `cmd.exe` 不把单引号 `'...'` 当作定界符，系统自带 PowerShell 5.1 向原生命令传递 `'...'` 时也会剥离内部双引号；推荐将筛选条件保存为 UTF-8 JSON 文件后使用 `--where-file` / `--json-file`，或通过标准输入 `--json -` 传入（自动忽略 UTF-8 BOM）：
+
+```bat
+node bin/mentor.mjs query --from mentors --where-file filters.json --select name,college,red_flags,actual_supervisor
+```
+
+也可以在 `cmd.exe` 中直接转义双引号：
+
+```bat
+node bin/mentor.mjs query --from mentors --where "[{\"field\":\"red_flags\",\"op\":\"contains\",\"value\":\"压榨\"}]" --select name,college,red_flags,actual_supervisor
 ```
 
 | 工具 | 能力 |
@@ -300,7 +347,7 @@ npm run cli -- query --from mentors \
 
 | 数据 | 规模与口径 |
 | :--- | :--- |
-| 可检索导师 | **1,309 位**：评价导师与全校公开导师合并去重，覆盖 **14 个学院** |
+| 可检索导师 | **1,309 位**：414 位评价导师与全校公开导师合并去重，覆盖 **14 个学院** |
 | 公开档案 | **1,245 页**官网与第三方介绍，含职称、方向、邮箱与指导学科 |
 | 评价归纳 | **309 条**个人或组内评价，归纳为 26 类优点、风险与注意事项 |
 | 择导速查 | **32 项**筛选条件，分属培养条件、口碑资质与研究方向三组 |
@@ -321,8 +368,9 @@ npm run cli -- query --from mentors \
 | 浏览器 E2E | `npm run test:e2e` | Playwright 验证桌面与手机流程、流式稳定性、导师对决、导出与候选库 |
 | 无障碍 | 随 E2E 执行 | `@axe-core/playwright` 按 **WCAG 2A / 2AA** 扫描核心页面与交互流程 |
 | 真实模型冒烟 | `npm run test:live` | 使用你配置的模型密钥验证端到端问答（可选） |
+| 数据防泄漏审计 | `npm run vault:check` | 审计 Git 索引、`.vault` 头部与构建/解锁边界，确保零明文外泄 |
 
-CI 在 **Linux / macOS / Windows** 三个平台、**Node 22 / 24** 两个版本上运行单元测试与生产构建，并单独执行 Chromium 浏览器测试。
+CI 在 **Linux / macOS / Windows** 三个平台、**Node 22 / 24** 两个版本上运行 Vault 审计、单元测试、生产构建、跨平台 CLI/启动器检查与发布包解压冒烟测试，并单独执行 Chromium 浏览器测试。
 
 <table>
 <tr>
@@ -349,14 +397,19 @@ CI 在 **Linux / macOS / Windows** 三个平台、**Node 22 / 24** 两个版本�
 
 ```text
 Polaris/
-├── bin/          CLI 入口（polaris / mentor-buffet）
-├── lib/          数据加载、工具内核、评价洞察、画像、筛选与 Vault
-├── server/       本机 HTTP、模型适配、Agent 循环、工作台与交付投影
-├── src/          React 界面：对话、导师档案、对决、漏斗、择导卡
-├── data/         匿名数据与 .vault 密文包
-├── scripts/      数据构建、导入、加封与发布打包
-├── tests/        单元、接口与 Playwright 浏览器测试
-└── docs/         版本说明、工具协议、图片与数据文档
+├── electron/     Electron 跨平台独立桌面端主进程与预加载桥接
+├── build/        Windows (.ico) / macOS (.icns) / PNG 应用图标资源
+├── bin/          CLI 入口（polaris / 兼容别名 mentor-buffet）
+├── lib/          数据加载、工具内核、多格式导出引擎、评价洞察、画像、筛选与 Vault
+├── server/       本机 HTTP、模型适配、Agent 循环、工作台、导出服务与交付投影
+├── src/          React 界面：对话、导师档案、对决、漏斗、择导卡、可视化设置
+├── data/         加密 .vault 数据包（零明文数据）
+├── scripts/      启动引导、图标生成、数据构建、导入、加封、防泄漏审计与发布打包
+├── tests/        单元、接口、跨平台与 Playwright 浏览器测试
+├── docs/         版本说明、工具协议、图片与发布文档
+├── start.cmd     Windows 一键启动器（CRLF）
+├── start.command macOS 一键启动器（LF）
+└── .gitattributes 跨平台换行符与二进制文件规则
 ```
 
 ---

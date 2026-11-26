@@ -1,4 +1,4 @@
-import React, { memo, Children, isValidElement, useMemo, useState } from 'react'
+import React, { memo, Children, isValidElement, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Check, Copy, ExternalLink } from 'lucide-react'
@@ -25,8 +25,10 @@ function MarkdownTable({ children }) {
 }
 function CodeBlock({ children }) {
   const [copied, setCopied] = useState(false)
+  const copyTimer = useRef(null)
+  useEffect(() => () => clearTimeout(copyTimer.current), [])
   const code = Children.toArray(children).find(isValidElement), language = code?.props.className?.replace('language-', '') || 'text'
-  async function copy() { try { await navigator.clipboard.writeText(textOf(children)); setCopied(true); setTimeout(() => setCopied(false), 1600) } catch { setCopied(false) } }
+  async function copy() { clearTimeout(copyTimer.current); try { await navigator.clipboard.writeText(textOf(children)); setCopied(true); copyTimer.current = setTimeout(() => setCopied(false), 1600) } catch { setCopied(false) } }
   return <div className="code-block"><div className="code-toolbar"><span>{language}</span><button onClick={copy} aria-label="复制代码">{copied ? <Check size={13}/> : <Copy size={13}/>} {copied ? '已复制' : '复制'}</button></div><pre>{children}</pre></div>
 }
 // Bold names and per-mentor headings become links to the mentor dossier.

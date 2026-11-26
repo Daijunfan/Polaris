@@ -20,11 +20,28 @@ export function normalizeBaseUrl(value) {
   return url.toString().replace(/\/$/, '')
 }
 
+export function maskApiKey(key) {
+  const value = String(key || '').trim()
+  if (!value) return ''
+  if (value.length <= 10) return '****'
+  return `${value.slice(0, 4)}****${value.slice(-4)}`
+}
+
+export function isLocalOllamaUrl(value) {
+  try {
+    const url = new URL(normalizeBaseUrl(value))
+    return ['localhost', '127.0.0.1'].includes(url.hostname) && url.port === '11434'
+  } catch {
+    return false
+  }
+}
+
 export function createConfig(store, env = process.env) {
   const saved = store.read('config', {})
+  const preferUi = saved.source === 'ui' && !env.MENTOR_CONFIG_OVERRIDE && !env.MENTOR_API_KEY
   let current = {
-    baseUrl: env.MENTOR_API_URL || saved.baseUrl || 'https://api.deepseek.com',
-    model: env.MENTOR_MODEL || saved.model || '',
+    baseUrl: (preferUi ? saved.baseUrl : env.MENTOR_API_URL || saved.baseUrl) || 'https://api.deepseek.com',
+    model: (preferUi ? saved.model : env.MENTOR_MODEL || saved.model) || '',
     apiKey: env.MENTOR_API_KEY || saved.apiKey || '',
     models: saved.models || [],
     contextWindow: Number(env.MENTOR_CONTEXT_TOKENS) || null,
@@ -44,11 +61,12 @@ export function createConfig(store, env = process.env) {
   }
   const publicConfig = () => {
     const value = effective(), budget = compressionBudget(value)
-    return { baseUrl: current.baseUrl, model: current.model, models: current.models, contextWindow: value.contextWindow, contextWindowKnown: value.contextWindowKnown, reasoningEffort: value.reasoningEffort, reasoningOptions: value.reasoningOptions, reasoningDefaultLevel: value.reasoningDefaultLevel, compressionThresholdTokens: current.compressionThresholdTokens, compressionTriggerTokens: budget.trigger, compressionMinTokens: budget.min, compressionMaxTokens: budget.max, outputReserveTokens: outputBudget(value), configured: Boolean(value.apiKey && current.model), hasKey: Boolean(value.apiKey) }
+    return { baseUrl: current.baseUrl, model: current.model, models: current.models, contextWindow: value.contextWindow, contextWindowKnown: value.contextWindowKnown, reasoningEffort: value.reasoningEffort, reasoningOptions: value.reasoningOptions, reasoningDefaultLevel: value.reasoningDefaultLevel, compressionThresholdTokens: current.compressionThresholdTokens, compressionTriggerTokens: budget.trigger, compressionMinTokens: budget.min, compressionMaxTokens: budget.max, outputReserveTokens: outputBudget(value), configured: Boolean(value.apiKey && current.model), hasKey: Boolean(value.apiKey), maskedKey: maskApiKey(value.apiKey) }
   }
   function candidate(input) {
     const baseUrl = normalizeBaseUrl(input.baseUrl || current.baseUrl)
-    const apiKey = input.apiKey?.trim() || (baseUrl === normalizeBaseUrl(current.baseUrl) ? effective().apiKey : '')
+    let apiKey = input.apiKey?.trim() || (baseUrl === normalizeBaseUrl(current.baseUrl) ? effective().apiKey : '')
+    if (!apiKey && isLocalOllamaUrl(baseUrl)) apiKey = 'ollama'
     if (!apiKey) throw new Error('请填写 API Key；更换 API 地址时需要重新填写密钥')
     return { baseUrl, apiKey, model: input.model?.trim() || '' }
   }
@@ -69,14 +87,14 @@ export function createConfig(store, env = process.env) {
     setModels(models) { current.models = models; Object.assign(saved, { baseUrl: current.baseUrl, model: current.model, models }); store.write('config', saved); return models },
     selectModel(model) {
       if (!current.models.some(m => m.id === model)) throw new Error('请从已加载的模型列表中选择，或在连接设置中填写自定义模型')
-      current.model = model; saved.model = model; saved.models = current.models
+      current.model = model; saved.model = model; saved.models = current.models; saved.source = 'ui'; saved.updatedAt = new Date().toISOString()
       store.write('config', saved)
       return publicConfig()
     },
     save(config, input, models = []) {
       // External key files remain external; never copy a test credential into the repo or config.
       current = { ...current, ...config, models }
-      const persisted = { baseUrl: config.baseUrl, model: config.model, models, reasoningEffort: current.reasoningEffort, compressionThresholdTokens: current.compressionThresholdTokens, ...(input.apiKey?.trim() ? { apiKey: config.apiKey } : saved.apiKey && config.apiKey === saved.apiKey ? { apiKey: saved.apiKey } : {}) }
+      const persisted = { source: 'ui', updatedAt: new Date().toISOString(), baseUrl: config.baseUrl, model: config.model, models, reasoningEffort: current.reasoningEffort, compressionThresholdTokens: current.compressionThresholdTokens, ...(input.apiKey?.trim() ? { apiKey: config.apiKey } : saved.apiKey && config.apiKey === saved.apiKey ? { apiKey: saved.apiKey } : {}) }
       Object.assign(saved, persisted)
       if (!persisted.apiKey) delete saved.apiKey
       store.write('config', persisted)

@@ -23,13 +23,15 @@ CLI／工具调用使用内部数据协议。聊天页面、消息事件和导�
 
 `metadata.colleges` 和 `metadata.coverage` 给出实际已收录学院及各院导师、评分、名册和成绩记录数。开放推荐先读取全体简要候选，再按需查详情；比较表保留college和group。只有评价而无名册的导师，人数与分数为null。同名导师按mentor_id和学院区分，官网仅沿用已有明确关联，不把同名网页拼给另一学院的记录。
 
-`mentors.mentor_note` 保存导师方向、培养与招生的第三方评价，与其他导师评价同类查询和引用；明确的个人情况优先于旧组内泛化描述。`data/mentor-notes.json` 可显式指定 `group_context:null`，表示该人的培养不继承组内共性；未指定时沿用原记录。个人查询、主题检索和管道结果都使用此覆盖，内置 Agent 的 `personal_conditions` 同时携带适用范围。付俊松由本人直接指导，其个人记录不带八组统一培养的组会、假期和压力描述；八组完整评价记录仍在 `reviews`，只用于查询组整体。不能把通常生源说成当年确定名额。
+`mentors.mentor_note` 保存导师方向、培养与招生的第三方评价，与其他导师评价同类查询和引用；明确的个人情况优先于旧组内泛化描述。`data/mentor-notes.vault`（本机明文工作副本位于 `.local/plaintext-data/mentor-notes.json`）可显式指定 `group_context:null`，表示该人的培养不继承组内共性；未指定时沿用原记录。个人查询、主题检索和管道结果都使用此覆盖，内置 Agent 的 `personal_conditions` 同时携带适用范围。付俊松由本人直接指导，其个人记录不带八组统一培养的组会、假期和压力描述；八组完整评价记录仍在 `reviews`，只用于查询组整体。不能把通常生源说成当年确定名额。
 
 `stipend_monthly_min/max` 是资料所载月劳务金额或区间端点，供数值筛选、排序和作图；相等时表示同一个记载金额，不表示实际收入保底或封顶。表格同时选择两列时，展示层合并为“月劳务（元）”：单值显示一次、区间显示为一项范围，条件保留在`stipend_text`。API原始数值与ref不变，旧对话表格和导出使用相同展示规则。
 
 已有对应导师对照表时，正文中列名、人员均被该表覆盖的重复手写表不再单独显示；复制与导出保留工具准备的实际数据表，避免正文另写一份不同数值。
 
 网页介绍与旧名册独立：`profiles.mentor_id` 在全部评价加载后按姓名与学院关联，保留已有明确关联，不把另一学院的同名网页拼过来。未匹配评价的官网人物仍参与search，并可从搜索ref按candidate_id继续筛选、排序和可视化；不能到mentors中查找不存在的绑定，也不能补造其评分、名册或成绩。`source_type` 区分官网和第三方；`fetched_at` 为抓取日，不是发布日期或在招证明。`catalog.sources` 只预览前12条，完整列表使用 `query sources`，具体查询会返回实际网页出处。
+
+> **跨平台命令行提示**：下方示例在 macOS / Linux（`bash` / `zsh`）与 PowerShell 7.3+ 中可直接运行；在 Windows `cmd.exe`（不把单引号 `'...'` 当作定界符，且 `|` 不能留在行尾）及 Windows 自带 PowerShell 5.1（向原生命令传递 `'...'` 时会剥离内部双引号）中，请改用 `--where-file filters.json` / `--json-file args.json` / `--json -`（自动忽略 UTF-8 BOM），或使用转义双引号 `\"...\"` 并在一行内通过 `|` 串联管道。
 
 ```sh
 node bin/mentor.mjs query --from profiles --where '[{"field":"name","op":"eq","value":"付俊松"}]' --select name,professional_title,research_areas,contact_email,source_type,url,fetched_at
@@ -118,7 +120,7 @@ node bin/mentor.mjs query --from mentors --where '[{"field":"student_count","op"
 | `doctoral_evidence` | 对应的博士指导依据；博士学历本身不作为资格 |
 | `group_lead` | 资料明确的组内管理职责；不生成学术分数 |
 
-例如 `query` 可直接选择 `name,college,rating,research_evidence,profile_evidence,can_supervise_doctoral`，随后将同一ref交给筛选、关联或可视化。评价目录仍为414条；仅有公开网页的其他候选继续从搜索ref使用。
+例如 `query` 可直接选择 `name,college,rating,research_evidence,profile_evidence,can_supervise_doctoral`，随后将同一ref交给筛选、关联或可视化。`mentors` 评价目录为 414 条（对应筛选漏斗基数），`search` 覆盖合并官网后的 1,309 位全校可检索候选（14 个学院）；仅有公开网页的其他候选继续从搜索 ref 使用。
 
 支持与 query 相同的 `filters,select,sort,sort_by,order,limit,offset`，结果 ref 可继续 query、join、aggregate 和 visualize。CLI与HTTP保留完整结果，内置模型预览保留本页全部姓名、评分与资格，并按所选模型容量分配长资料预算。1M模型可读取更完整的科研资料，小容量模型可继续从ref分批读取。来源预览保留编号、标题和类别，具体链接与日期仍在完整结果中。
 
@@ -237,6 +239,8 @@ IN只筛选行，不保留输入名单的先后。确定推荐顺序后，可用
 
 ## CLI 管道
 
+macOS / Linux（`bash` / `zsh`）多行管道示例：
+
 ```sh
 # 得到相近分数的唯一关联样本，然后统计每位导师的人数。
 node bin/mentor.mjs query --from exams --where '[{"field":"score_first","op":"between","value":[335,365]},{"field":"admitted","op":"eq","value":true},{"field":"match_status","op":"eq","value":"unique"}]' --select mentor_id,mentor_name,score_first |
@@ -244,20 +248,31 @@ node bin/mentor.mjs query --from exams --where '[{"field":"score_first","op":"be
   node bin/mentor.mjs join --left - --right mentors --left-on mentor_id --right-on mentor_id --select mentor_name,样本数,初试中位分,rating,internship
 ```
 
-所有工具都支持 `--json '<完整工具参数>'`。成功时只输出 JSON 到 stdout；失败时 JSON 错误写到 stderr，退出码 1。
+Windows `cmd.exe` 请写成单行并配合 `--where-file` / `--json-file`（或转义 `\"`）：
+
+```bat
+node bin/mentor.mjs query --from exams --where-file exam-filters.json --select mentor_id,mentor_name,score_first | node bin/mentor.mjs aggregate --from - --group-by mentor_id,mentor_name --json-file agg-args.json | node bin/mentor.mjs join --left - --right mentors --left-on mentor_id --right-on mentor_id --select mentor_name,样本数,初试中位分,rating,internship
+```
+
+所有工具都支持 `--json '<完整工具参数>'`、`--json -`、`--json-file <path>` 与 `--where-file <path>`。成功时只输出 JSON 到 stdout；失败时 JSON 错误写到 stderr，退出码 1。
 
 ## HTTP
 
+macOS / Linux / PowerShell 7+（Windows PowerShell 5.1 中 `curl` 是 `Invoke-WebRequest` 别名，请改用 `curl.exe`）：
+
 ```sh
 curl http://127.0.0.1:3210/api/tools
-curl -X POST http://127.0.0.1:3210/api/tools/query -H 'Content-Type: application/json' -d '{"from":"mentors","select":["name","rating"],"limit":5}'
+curl -X POST http://127.0.0.1:3210/api/tools/query -H "Content-Type: application/json" -d "{\"from\":\"mentors\",\"select\":[\"name\",\"rating\"],\"limit\":5}"
 ```
 
 服务提供：
 
 | 方法 | 路径 | 行为 |
 | --- | --- | --- |
-| GET | `/api/health`, `/api/data`, `/api/tools` | 健康、数据概况和工具 Schema |
+| GET | `/api/health`, `/api/data`, `/api/tools` | 健康（含 `vault_locked`、`mentor_count`、`data_revision`）、数据概况和工具 Schema |
+| GET | `/api/vault/status` | 查询 Vault 锁定状态、解密模式（`builtin`/`custom`/`locked`）与数据集清单 |
+| POST | `/api/vault/unlock` | `{ "key": "..." }`：运行时注入密钥解锁 Vault 并重建工具、工作台与洞察缓存 |
+| GET | `/api/sources/:id` | 读取单个来源摘要预览（最多 20 条，含 `truncated`、`total_entries` 与 `protection_notice`） |
 | POST | `/api/tools/:name` | 执行同名工具，参数为工具 JSON |
 | GET / PUT | `/api/config` | 读取脱敏配置 / 检测并保存连接 |
 | PUT | `/api/config/execution` | 保存 `reasoningEffort` 和 `compressionThresholdTokens`；null阈值表示自动管理 |
@@ -305,10 +320,10 @@ SSE 事件：`start,sync,progress,context,tool_start,tool_end,artifact,delta,usa
 
 ## 个人工作台工具
 
-`workspace` 与六个纯数据工具分开：连接正在运行的本机服务，读写用户的候选、备注、比较、清单、动态视图、模板和方案。普通数据 CLI 仍可独立运行。HTTP 与内置 Agent 共用 `createWorkbench()`，服务端按分析功能的程度检查权限；不按会员档位限制收藏或比较人数。
+`workspace` 与六个纯数据工具分开：连接正在运行的本机服务，读写用户的候选、备注、比较、清单、动态视图、模板和方案。普通数据 CLI 仍可独立运行。HTTP 与内置 Agent 共用 `createWorkbench()`，所有工作台、分析视图、对比与导出能力对全部用户开放，不做会员分级或人数限制。
 
 ```sh
-# 实际查询结果直接收藏；导师按姓名与学院解析，不跨进程传临时ref
+# 实际查询结果直接收藏；导师按姓名与学院解析，不跨进程传临时ref（Windows cmd.exe 请写在同一行并使用 --where-file）
 node bin/mentor.mjs query --from mentors --where '[{"field":"college","op":"eq","value":"软件学院"},{"field":"rating","op":"gte","value":4}]' --select name,college |
   node bin/mentor.mjs workspace --action save --from -
 
@@ -320,16 +335,16 @@ node bin/mentor.mjs workspace --action read --limit 1000 |
 node bin/mentor.mjs workspace --action read --include-notes
 
 # 使用当前工作台名单生成真实报告文件，返回file元数据
-node bin/mentor.mjs workspace --action report --format html --name '本轮导师比较'
+node bin/mentor.mjs workspace --action report --format html --name 本轮导师比较
 ```
 
-默认连接 `http://127.0.0.1:3210`，可用 `--server` 或 `MENTOR_SERVER_URL` 指定。复杂参数用 `--json`，完整定义由 `schemas` 返回。消费标准输入时必须包含完整 rows，不能把分页样本静默当成整份名单。
+默认连接 `http://127.0.0.1:3210`，可用 `--server` 或 `MENTOR_SERVER_URL` 指定。复杂参数用 `--json` / `--json-file` / `--json -`，完整定义由 `schemas` 返回。消费标准输入时必须包含完整 rows，不能把分页样本静默当成整份名单。
 
 `POST /api/tools/workspace` 接受同一工具参数。`read` 返回的 ref 只含本页；`analyze` 使用已收藏人选和共享 filters 语义，得到的表可继续 query / visualize。`scenario` 按两份实际方案 ID 返回共同、增减与保存资料差异，维度增减单独表达。
 
-`report` 在私有目录保存实际文件，返回 `file.id/name/format/depth/count/createdAt`；`GET /api/workbench/reports/:id` 下载原文件。聊天消息只携带文件元数据，刷新与体验切换不重新生成内容。基础事实、联系进度、非空备注及真实来源保留，进阶档位增加概览、图表及已有方案结论。已有文件不因档位变化失效。
+`report` 在私有目录保存实际文件，返回 `file.id/name/format/depth/count/createdAt`；`GET /api/workbench/reports/:id` 下载原文件。聊天消息只携带文件元数据，刷新不会丢失或重新生成已保存文件；导出始终包含完整事实、联系进度、非空备注、真实来源、概览、图表及已有方案结论。
 
-界面使用 `/api/workbench` 读取完整状态，`/comparison` 的 PUT 替换名单、PATCH 增减人选；其余条目、清单、视图、模板与方案接口均属于私有本机工作区。不同学院同名导师分别存储。实际会员与所有者权限由本机私有配置决定，体验切换只改变当前分析功能，不改实际等级。
+界面使用 `/api/workbench` 读取完整状态，`/comparison` 的 PUT 替换名单、PATCH 增减人选；其余条目、清单、视图、模板与方案接口均属于私有本机工作区。不同学院同名导师分别存储，所有分析与导出能力默认全量启用。
 
 ### 读取当前对比与载入保存项
 
@@ -337,4 +352,4 @@ node bin/mentor.mjs workspace --action report --format html --name '本轮导师
 
 `read` 返回的 `snapshots/templates` 提供保存项元数据；`restore` 使用 `saved_type:"snapshot"|"template"` 和实际 `saved_id` 载入。方案恢复名单、维度和目标；模板恢复维度和目标，保留当前名单；两者均保留最新个人备注与联系进度。
 
-`report` 默认直接使用当前对比，明确 `scope:"library"` 才导出收藏库。`from/mentors` 仍可显式指定其他报告人选，来源于实际查询结果。详见[4.0.1 使用走查](USABILITY-4.0.1.md)。
+`report` 默认直接使用当前对比，明确 `scope:"library"` 才导出收藏库。`from/mentors` 仍可显式指定其他报告人选，来源于实际查询结果。详见[5.0.0 版本说明](POLARIS-5.0.0.md)与[发布检查](RELEASE-CHECKLIST.md)。

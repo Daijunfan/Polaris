@@ -4,9 +4,25 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { readSheet } from 'read-excel-file/node'
+import { readSealedDataset } from '../lib/data.js'
+import { sealSingleVault } from './seal-data.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
+const plaintextDir = path.join(root, '.local', 'plaintext-data')
 const read = name => fs.readFile(path.join(root, name), 'utf8')
+async function readBaselineDataset() {
+  const plaintextPath = path.join(plaintextDir, 'dataset.json')
+  try {
+    return JSON.parse(await fs.readFile(plaintextPath, 'utf8'))
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+  }
+  const sealed = readSealedDataset('dataset')
+  if (!sealed || sealed?.metadata?.vault_locked) {
+    throw new Error('无法读取基准数据集：请确保 .local/plaintext-data/dataset.json 存在或 vault 已解锁')
+  }
+  return sealed
+}
 const table = text => text.split(/\r?\n/).filter(line => /^\|\s*\d+\s*\|/.test(line))
   .map(line => line.replaceAll('\\|', '\u0000').split('|').slice(1, -1).map(s => s.trim().replaceAll('\u0000', '|')))
 const num = value => value === '' || value == null || !Number.isFinite(Number(value)) ? null : Number(value)
@@ -21,7 +37,7 @@ try { privateIds = JSON.parse(await fs.readFile(mapFile, 'utf8')) } catch (error
 const id = (kind, value) => privateIds[`${kind}:${value}`] ||= `${kind}-${randomUUID().replaceAll('-', '').slice(0, 12)}`
 
 const [firstText, secondText, canonical, workbook] = await Promise.all([
-  read('初试结果.md'), read('复试结果.md'), read('data/dataset.json').then(JSON.parse),
+  read('初试结果.md'), read('复试结果.md'), readBaselineDataset(),
   readSheet(path.join(root, '网络空间安全学院研究生分班表.xlsx')),
 ])
 const [headers, ...rawRows] = workbook
@@ -109,21 +125,26 @@ for (const m of mentorMap.values()) {
   m.score_first_mean = mean(values)
   m.score_first_median = median(values)
 }
+const { vault_locked: _vaultLocked, vault_mode: _vaultMode, ...baselineMetadata } = canonical.metadata || {}
 const dataset = {
   metadata: {
-    ...canonical.metadata,
+    ...baselineMetadata,
     name: APP_NAME, version: canonical.metadata.version, year: 2026, colleges: [college],
     scope: '北京邮电大学网络空间安全学院；2026 年资料快照',
     counts: { mentors: mentorMap.size, students: students.length, exams: exams.length, reviews: reviews.length, linked_exams: linked.size, ambiguous_exams: exams.filter(e => e.match_status === 'ambiguous').length,
       exam_students: students.filter(s => s.admission_type === 'exam').length, recommended_students: students.filter(s => s.admission_type === 'recommended').length },
     notes: canonical.metadata.notes,
   },
+  ...(canonical.review_revision ? { review_revision: canonical.review_revision } : {}),
   mentors: [...mentorMap.values()].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
   students, exams, reviews,
   sources: canonical.sources,
 }
-await fs.mkdir(path.join(root, 'data'), { recursive: true })
-await fs.writeFile(path.join(root, 'data/dataset.json'), JSON.stringify(dataset, null, 2) + '\n')
+await fs.mkdir(plaintextDir, { recursive: true })
+await fs.writeFile(path.join(plaintextDir, 'dataset.json'), JSON.stringify(dataset, null, 2) + '\n', { mode: 0o600 })
 await fs.writeFile(mapFile, JSON.stringify(privateIds, null, 2), { mode: 0o600 })
 await fs.writeFile(path.join(root,'.local/student-names.json'),JSON.stringify(studentNames,null,2)+'\n',{mode:0o600})
+if (!process.argv.includes('--no-seal')) {
+  sealSingleVault('dataset', { custom: process.argv.includes('--custom') })
+}
 console.log(JSON.stringify(dataset.metadata, null, 2))

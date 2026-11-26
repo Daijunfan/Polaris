@@ -4,8 +4,9 @@ import {fingerprintAxes} from '../../lib/insights.js'
 import {usePolaris} from '../insights.jsx'
 import {useWorkspace} from '../workspace.jsx'
 import {api} from '../api.js'
-import {display} from '../presentation.js'
+import {display,formatAcademicSummary,formatDisciplineText} from '../presentation.js'
 import Dialog from './Dialog.jsx'
+import ExportMenu from './ExportMenu.jsx'
 
 const toneIcon={good:BadgeCheck,bad:AlertTriangle,note:Info}
 const SHORT_AXIS={reputation:'口碑',freedom:'自由',internship:'实习',funding:'经费',guidance:'指导',research:'科研'}
@@ -35,7 +36,7 @@ export function Radar({series,size=216,showLabels=true,active,onAxis}){
   const point=(index,value)=>{const angle=-Math.PI/2+index*2*Math.PI/count,d=radius*value/5;return [center+d*Math.cos(angle),center+d*Math.sin(angle)]}
   return <svg className="radar" viewBox={`0 0 ${size} ${size}`} role="img" aria-label={'培养画像：'+series.map(item=>(item.name?item.name+' ':'')+fingerprintAxes.map(axis=>axis.label+(item.fingerprint[axis.key]?item.fingerprint[axis.key].value:'无记录')).join('，')).join('；')}>
     {[1,2,3,4,5].map(level=><polygon key={level} className={'radar-grid'+(level===5?' outer':'')} points={fingerprintAxes.map((_,index)=>point(index,level).join(',')).join(' ')}/>)}
-    {fingerprintAxes.map((axis,index)=>{const [x,y]=point(index,5),[lx,ly]=point(index,6.08);return <g key={axis.key}><line className="radar-axis" x1={center} y1={center} x2={x} y2={y}/>{showLabels&&<text className={'radar-label'+(active===axis.key?' active':'')+(series.every(item=>!item.fingerprint[axis.key])?' empty':'')} x={lx} y={ly} textAnchor={Math.abs(lx-center)<4?'middle':lx>center?'start':'end'} dominantBaseline="middle" onClick={onAxis?()=>onAxis(axis.key):undefined} style={onAxis?{cursor:'pointer'}:undefined}>{axis.label}</text>}</g>})}
+    {fingerprintAxes.map((axis,index)=>{const [x,y]=point(index,5),[lx,ly]=point(index,6.08);return <g key={axis.key}><line className="radar-axis" x1={center} y1={center} x2={x} y2={y}/>{showLabels&&<text className={'radar-label'+(active===axis.key?' active':'')+(series.every(item=>!item.fingerprint[axis.key])?' empty':'')+(onAxis?' is-interactive':'')} x={lx} y={ly} textAnchor={Math.abs(lx-center)<4?'middle':lx>center?'start':'end'} dominantBaseline="middle" onClick={onAxis?()=>onAxis(axis.key):undefined}>{axis.label}</text>}</g>})}
     {series.map((item,seriesIndex)=>{
       const color=item.color||radarColors[seriesIndex%radarColors.length]
       const values=fingerprintAxes.map(axis=>item.fingerprint[axis.key]?.value??0)
@@ -57,7 +58,7 @@ export function Avatar({name,size=52,tone}){
 }
 
 function splitDirectionTags(str){
-  return String(str||'').split(/[、,，；;\n]+/).map(s=>s.trim()).filter(Boolean)
+  return formatDisciplineText(str).split(/[、,，；;|\n]+/).map(s=>s.trim()).filter(Boolean)
 }
 
 export function MentorDossier({onAsk,busy}){
@@ -82,15 +83,23 @@ export function MentorDossier({onAsk,busy}){
   const ask=text=>{polaris.dismissMentorAll();w?.close?.();onAsk?.(text)}
   const who=`${insight.name}（${insight.college}）`
   const axisInfo=axis&&insight.fingerprint[axis]
-  const meaningfulAcademic=insight.academicSummary&&insight.academicSummary.trim()!==(insight.title||'').trim()?insight.academicSummary:null
+  const meaningfulAcademic=formatAcademicSummary(insight.academicSummary,insight.title)
   const facts=detail&&w?.state?w.state.fieldOptions.filter(field=>!['rating','green_flags','red_flags','actual_supervisor'].includes(field.key)&&detail[field.key]!=null&&detail[field.key]!==''):[]
   const officialOnly=!insight.evidence.personal&&!insight.evidence.team&&!insight.flags.length&&insight.rating==null
-  const admissionsText=[insight.doctoralPrograms,insight.admissions].filter(Boolean).join('\n')
+  const admissionsText=[insight.doctoralPrograms,insight.admissions].filter(Boolean).map(formatDisciplineText).join('\n')
+  const formatFactValue=field=>{
+    if(['doctoral_evidence','profile_evidence','admissions','programs','research_evidence','research_areas'].includes(field.key))return formatDisciplineText(display(detail[field.key],field))
+    if(field.key==='academic_summary')return formatAcademicSummary(detail[field.key],insight.title)||display(detail[field.key],field)
+    return display(detail[field.key],field)
+  }
+  const bioText=formatDisciplineText(insight.biography)
+  const projectsText=formatDisciplineText(insight.projects)
+  const achievementsText=formatDisciplineText(insight.achievements)
   const officialCards=[
-    insight.biography&&['个人简介',insight.biography],
+    bioText&&['个人简介',bioText],
     admissionsText&&['指导学科与招生',admissionsText],
-    insight.projects&&['主持科研项目',insight.projects],
-    insight.achievements&&['代表性成果与奖项',insight.achievements],
+    projectsText&&['主持科研项目',projectsText],
+    achievementsText&&['代表性成果与奖项',achievementsText],
   ].filter(Boolean)
 
   const directionTags=splitDirectionTags(insight.directions)
@@ -105,9 +114,9 @@ export function MentorDossier({onAsk,busy}){
     admissionsText&&['指导学科与招生专业',admissionsText],
     meaningfulAcademic&&['学术与科研平台',meaningfulAcademic],
     insight.enrollmentSignal&&['生源与学生选择',insight.enrollmentSignal],
-    insight.biography&&['教师简介',insight.biography],
-    insight.projects&&['科研项目',insight.projects],
-    insight.achievements&&['代表性成果',insight.achievements],
+    bioText&&['教师简介',bioText],
+    projectsText&&['科研项目',projectsText],
+    achievementsText&&['代表性成果',achievementsText],
   ].filter(Boolean)
 
   const hasRichReviewFlags=bad.length+good.length>=4
@@ -134,6 +143,7 @@ export function MentorDossier({onAsk,busy}){
           </div>
           <div className="dossier-hero-side">
             {match&&<div className="dossier-match"><MatchRing match={match} size={46}/><small>契合度</small></div>}
+            <ExportMenu variant="compact" label="导出档案" ariaLabel={`导出 ${insight.name} 导师档案`} formats={['pdf','docx','xlsx','md']} getPayload={format => ({ kind: 'dossier', format, key: insight.key, name: insight.name, college: insight.college })} onSuccess={({ filename }) => w?.setMessage?.(`已导出 ${filename}`)} onError={err => w?.fail?.(err)} />
             {w?.state&&<button type="button" className={'dossier-save-btn'+(saved?' is-on':'')} disabled={w.pending} onClick={()=>w.saveMentor({key:insight.key,name:insight.name,college:insight.college}).catch(()=>{})}>
               <Bookmark size={14} fill={saved?'currentColor':'none'} aria-hidden="true"/>
               {saved?'已在候选库':'加入候选库'}
@@ -220,7 +230,7 @@ export function MentorDossier({onAsk,busy}){
         <button disabled={busy} onClick={()=>ask(`帮我给${who}写一封套磁邮件，结合他的研究方向和我的画像，未提供的个人信息留空。`)}><PenLine size={15}/>写套磁信</button>
       </div>}
 
-      {facts.length>0&&<details className="dossier-facts" open={officialOnly&&!officialCards.length?true:undefined}><summary>查看原始档案字段与核验来源（{detail?.sources?.length||insight.evidence.sources} 项来源）</summary><dl>{facts.map(field=><div key={field.key}><dt>{field.label}</dt><dd>{display(detail[field.key],field)}</dd></div>)}</dl>{detail.sources?.length>0&&<p className="dossier-sources">来源：{detail.sources.map(source=>source.url?<a key={source.id} href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a>:<span key={source.id}>{source.title}</span>)}</p>}</details>}
+      {facts.length>0&&<details className="dossier-facts" open={officialOnly&&!officialCards.length?true:undefined}><summary>查看原始档案字段与核验来源（{detail?.sources?.length||insight.evidence.sources} 项来源）</summary><dl>{facts.map(field=><div key={field.key}><dt>{field.label}</dt><dd>{formatFactValue(field)}</dd></div>)}</dl>{detail.sources?.length>0&&<p className="dossier-sources">来源：{detail.sources.map(source=>source.url?<a key={source.id} href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a>:<span key={source.id}>{source.title}</span>)}</p>}</details>}
     </div>
   </Dialog>
 }

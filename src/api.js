@@ -5,8 +5,8 @@ export async function api(path, options = {}) {
   return body
 }
 
-export async function streamChat(id, text, onEvent) {
-  const response = await fetch(`/api/chats/${id}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) })
+export async function streamChat(id, text, onEvent, { signal } = {}) {
+  const response = await fetch(`/api/chats/${id}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }), signal })
   return readEvents(response, onEvent)
 }
 
@@ -60,7 +60,43 @@ export function modelLabel(model, {compact=false}={}) {
 
 export const tokenNumber = value => new Intl.NumberFormat('zh-CN').format(value || 0)
 export function downloadFile(filename, content, type = 'text/plain;charset=utf-8') {
-  const href = URL.createObjectURL(new Blob([content], { type })), link = document.createElement('a')
+  const blob = content instanceof Blob ? content : new Blob([content], { type })
+  const href = URL.createObjectURL(blob), link = document.createElement('a')
   link.href = href; link.download = filename; link.click()
-  setTimeout(() => URL.revokeObjectURL(href), 1000)
+  setTimeout(() => URL.revokeObjectURL(href), 1500)
+}
+
+function filenameFromHeaders(headers, fallback) {
+  const direct = headers.get('x-export-filename')
+  if (direct) {
+    try { return decodeURIComponent(direct) } catch { return direct }
+  }
+  const disp = headers.get('content-disposition') || ''
+  const utf8Match = disp.match(/filename\*\s*=\s*UTF-8''([^;]+)/i)
+  if (utf8Match) {
+    try { return decodeURIComponent(utf8Match[1].trim()) } catch { return utf8Match[1].trim() }
+  }
+  const plainMatch = disp.match(/filename\s*=\s*"?([^";]+)"?/i)
+  if (plainMatch) return plainMatch[1].trim()
+  return fallback
+}
+
+export async function exportFile(payload) {
+  const response = await fetch('/api/export', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    let body = {}
+    try { body = await response.json() } catch {}
+    const error = new Error(body.error || `导出失败（${response.status}）`)
+    error.status = response.status
+    throw error
+  }
+  const ext = String(payload?.format || 'xlsx').toLowerCase()
+  const filename = filenameFromHeaders(response.headers, `北极星导出.${ext}`)
+  const blob = await response.blob()
+  downloadFile(filename, blob, response.headers.get('content-type') || blob.type)
+  return { filename, size: blob.size }
 }

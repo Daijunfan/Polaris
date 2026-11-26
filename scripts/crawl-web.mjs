@@ -4,19 +4,37 @@ import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 import { pageDocument, parseOfficialProfile, parseSupplement } from './web-pages.mjs'
-import {loadData,resolveProfileMentor} from '../lib/data.js'
+import { loadData, readSealedDataset, resolveProfileMentor } from '../lib/data.js'
+import { sealSingleVault } from './seal-data.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url)), cache = path.join(root, '.local/web-cache')
-const target = path.join(root, 'data/web-profiles.json'), refresh = process.argv.includes('--refresh')
+const plaintextDir = path.join(root, '.local', 'plaintext-data')
+const target = path.join(plaintextDir, 'web-profiles.json'), refresh = process.argv.includes('--refresh')
 const onlyAt=process.argv.indexOf('--only'),only=onlyAt<0?null:new Set((process.argv[onlyAt+1]||'').split(/[，,]/).map(name=>name.trim()).filter(Boolean))
 if(only&&!only.size)throw new Error('--only 后填写导师姓名，多个姓名用逗号分隔')
 const seedsOnly=process.argv.includes('--seeds-only')
 const officialRoot = 'https://bupt.teacher.360eol.com', directory = `${officialRoot}/teacher/teacherList`,catalog=loadData()
+if (catalog?.metadata?.vault_locked) {
+  throw new Error('导师加密库处于锁定状态，无法执行网页抓取；请先解锁或移除 POLARIS_FORCE_LOCK')
+}
+async function readJsonOrSealed(name, fallback, required = false) {
+  const plaintextPath = path.join(plaintextDir, `${name}.json`)
+  try {
+    return JSON.parse(await fs.readFile(plaintextPath, 'utf8'))
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+  }
+  const sealed = readSealedDataset(name)
+  if (sealed != null) return sealed
+  if (required) throw new Error(`缺少必需的数据集：${name}（.local/plaintext-data/${name}.json 或 data/${name}.vault）`)
+  return fallback
+}
+await fs.mkdir(plaintextDir, { recursive: true })
 const version=JSON.parse(await fs.readFile(path.join(root,'package.json'),'utf8')).version
-const old = await fs.readFile(target, 'utf8').then(JSON.parse).catch(error => { if (error.code === 'ENOENT') return { profiles: [], sources: [] }; throw error })
+const old = await readJsonOrSealed('web-profiles', { profiles: [], sources: [] })
 const oldPages = new Map(old.profiles.map(row => [row.url, row])), sources = new Map(old.sources.map(source => [source.url, source]))
-const mentorNotes=JSON.parse(await fs.readFile(path.join(root,'data/mentor-notes.json'),'utf8'))
-const imported=await fs.readFile(path.join(root,'data/pdf-reviews.json'),'utf8').then(JSON.parse).catch(error=>{if(error.code==='ENOENT')return {sources:[]};throw error})
+const mentorNotes = await readJsonOrSealed('mentor-notes', { sources: [], notes: [] }, true)
+const imported = await readJsonOrSealed('pdf-reviews', { sources: [] })
 let nextSource = Math.max(3, ...old.sources.map(source => Number(source.id.slice(1))),...mentorNotes.sources.map(source=>Number(source.id.slice(1))),...imported.sources.map(source=>Number(source.id.slice(1)))) + 1
 const report = { started_at: new Date().toISOString(), directories: [], failures: [], retained: [], skipped: [] }
 await fs.mkdir(cache, { recursive: true })
@@ -104,7 +122,7 @@ report.directories.push({ url: future, pages: visited.size })
 
 }
 
-const seeds = JSON.parse(await fs.readFile(path.join(root, 'data/web-seeds.json'), 'utf8'))
+const seeds = await readJsonOrSealed('web-seeds', [], true)
 for (const seed of seeds) queue({ ...seed, parser: 'supplement' })
 const rows = []
 const jobs = [...tasks.values()]
@@ -135,8 +153,11 @@ if (!rows.some(row => row.source_type === '学校官网')) throw new Error('未�
 rows.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.url.localeCompare(b.url))
 const used = new Set(rows.flatMap(row => row.source_ids))
 const snapshot = { version: 1, updated_at: new Date().toISOString(), directory_url: directory, profiles: rows, sources: [...sources.values()].filter(source => used.has(source.id)).sort((a, b) => Number(a.id.slice(1)) - Number(b.id.slice(1))) }
-await fs.writeFile(`${target}.next`, JSON.stringify(snapshot, null, 2) + '\n')
+await fs.writeFile(`${target}.next`, JSON.stringify(snapshot, null, 2) + '\n', { mode: 0o600 })
 await fs.rename(`${target}.next`, target)
+if (!process.argv.includes('--no-seal')) {
+  sealSingleVault('web-profiles', { custom: process.argv.includes('--custom') })
+}
 report.finished_at = snapshot.updated_at
 report.profiles = rows.length; report.teachers = new Set(rows.map(row => row.name)).size
 report.official = rows.filter(row => row.source_type === '学校官网').length

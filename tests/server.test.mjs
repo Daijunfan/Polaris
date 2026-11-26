@@ -10,6 +10,7 @@ import { createConfig, normalizeBaseUrl } from '../server/config.js'
 import { startMockProvider } from './mock-provider.mjs'
 import { createToolRuntime } from '../lib/tools.js'
 import { loadData } from '../lib/data.js'
+import { VAULT_NAMES, getRuntimeVaultState, isVaultConfigured, lockedFallbackDataset, resetRuntimeVaultState, sealVaultPayload } from '../lib/vault.js'
 import { compactContext, contextMessages, estimateTokens, refreshDataContext,visibleHistory } from '../server/context.js'
 import {reviewAnswer} from '../server/review.js'
 import {parseDsmlToolCalls} from '../server/provider.js'
@@ -569,5 +570,380 @@ test('parseDsmlToolCalls 将 DeepSeek DSML 工具标签解析为可执行 tool_c
   assert.equal(parsed[0].function.name,'query')
   assert.deepEqual(JSON.parse(parsed[0].function.arguments),{from:'mentors',limit:30,filters:[{field:'rating',op:'gte',value:4}]})
   assert.deepEqual(parseDsmlToolCalls('<｜｜DSML｜｜ calls>内部调用不应作为结果。</｜｜DSML｜｜ calls>'),[])
+})
+
+test('GET /api/health 与 /api/vault/status 返回真实加密状态、模式、导师数与 data_revision', async () => {
+  const health = await call('/api/health')
+  assert.equal(health.status, 200)
+  assert.equal(health.body.ok, true)
+  assert.equal(health.body.name, '北极星')
+  assert.equal(health.body.vault_locked, false)
+  assert.equal(health.body.mentor_count, 414)
+  assert.equal(health.body.data_revision, app.dataRevision)
+
+  const status = await call('/api/vault/status')
+  assert.equal(status.status, 200)
+  assert.equal(status.body.locked, false)
+  assert.equal(status.body.mode, 'builtin')
+  assert.equal(status.body.datasets.length, VAULT_NAMES.length)
+  assert.ok(status.body.datasets.every(item => item.sealed === true))
+})
+
+test('POST /api/vault/unlock 先校验密钥后更新状态，并完整重建 apiTools、workbench、insightCache 与 dataRevision', async () => {
+  const tempVaultDir = await fs.mkdtemp(path.join(os.tmpdir(), 'polaris-unlock-vault-'))
+  const tempStoreDir = await fs.mkdtemp(path.join(os.tmpdir(), 'polaris-unlock-store-'))
+  const secret = 'polaris-custom-test-key-2026-valid'
+  const sampleDataset = {
+    metadata: {
+      name: '北极星',
+      version: 5,
+      year: 2026,
+      colleges: ['网络空间安全学院'],
+      counts: { mentors: 2, students: 0, exams: 0, reviews: 1, web_profiles: 0 },
+      notes: [],
+    },
+    mentors: [
+      {
+        mentor_id: 'mentor-test-1',
+        name: '测试加密导师甲',
+        college: '网络空间安全学院',
+        group: '一组',
+        directions: '系统安全',
+        personal_directions: '漏洞挖掘',
+        rating: 5,
+        stipend_monthly_min: 2000,
+        stipend_monthly_max: 2000,
+        stipend_text: '每月2000元',
+        review_text: '实习：支持暑期实习；管理：不打卡。',
+        source_ids: ['S1'],
+      },
+      {
+        mentor_id: 'mentor-test-2',
+        name: '测试加密导师乙',
+        college: '网络空间安全学院',
+        group: '二组',
+        directions: '密码学',
+        personal_directions: null,
+        rating: 4,
+        stipend_monthly_min: 1000,
+        stipend_monthly_max: 1000,
+        stipend_text: '每月1000元',
+        review_text: '毕业：按学院标准毕业。',
+        source_ids: ['S1'],
+      },
+    ],
+    students: [],
+    exams: [],
+    reviews: [
+      {
+        review_id: 'review-test-1',
+        mentor_id: 'mentor-test-1',
+        name: '测试加密导师甲',
+        college: '网络空间安全学院',
+        rating: 5,
+        text: '实习：支持暑期实习；管理：不打卡。',
+        source_ids: ['S1'],
+      },
+    ],
+    profiles: [],
+    sources: [{ id: 'S1', title: '测试评价源', kind: '第三方评价', year: 2026 }],
+  }
+  const datasetPath = path.join(tempVaultDir, 'dataset.vault')
+  await fs.writeFile(datasetPath, sealVaultPayload('dataset', sampleDataset, secret))
+
+  const loadFromTemp = ({ allowLockedFallback }) => {
+    try {
+      return loadData(datasetPath)
+    } catch (error) {
+      if (allowLockedFallback && ['ERR_VAULT_AUTH_FAILED', 'ERR_VAULT_LOCKED'].includes(error.code)) {
+        const locked = lockedFallbackDataset()
+        locked.mentor_notes = []
+        locked.metadata.profile_colleges = locked.metadata.colleges
+        locked.metadata.coverage = []
+        return locked
+      }
+      throw error
+    }
+  }
+
+  resetRuntimeVaultState()
+  const localApp = createApplication({
+    store: createStore(tempStoreDir),
+    config: createConfig(createStore(tempStoreDir), {}),
+    data: loadFromTemp({ allowLockedFallback: true }),
+    reload: () => loadFromTemp({ allowLockedFallback: false }),
+    vaultDir: tempVaultDir,
+  })
+  const localServer = http.createServer(localApp.handler)
+  await new Promise(resolve => localServer.listen(0, '127.0.0.1', resolve))
+  const localBase = `http://127.0.0.1:${localServer.address().port}`
+  const localCall = async (url, method = 'GET', body) => {
+    const response = await fetch(localBase + url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: body && JSON.stringify(body),
+    })
+    return { status: response.status, body: await response.json() }
+  }
+
+  try {
+    const initialHealth = await localCall('/api/health')
+    assert.equal(initialHealth.body.vault_locked, true)
+    assert.equal(initialHealth.body.mentor_count, 0)
+    const lockedRevision = initialHealth.body.data_revision
+    assert.equal(lockedRevision, localApp.dataRevision)
+
+    const initialStatus = await localCall('/api/vault/status')
+    assert.equal(initialStatus.body.locked, true)
+    assert.equal(initialStatus.body.mode, 'locked')
+    assert.equal(initialStatus.body.datasets.find(d => d.name === 'dataset')?.sealed, true)
+
+    assert.equal((await localCall('/api/workbench/directory')).body.total, 0)
+    const lockedCatalog = await localCall('/api/tools/catalog', 'POST', {})
+    assert.equal(lockedCatalog.status, 200)
+    assert.equal(lockedCatalog.body.datasets.find(d => d.name === 'mentors')?.count, 0)
+    const lockedQuery = await localCall('/api/tools/query', 'POST', { from: 'mentors' })
+    assert.equal(lockedQuery.status, 400)
+    assert.equal((await localCall('/api/insights')).body.count, 0)
+
+    const shortAttempt = await localCall('/api/vault/unlock', 'POST', { key: 'too-short' })
+    assert.equal(shortAttempt.status, 400)
+    assert.equal(localApp.dataRevision, lockedRevision)
+
+    const wrongAttempt = await localCall('/api/vault/unlock', 'POST', { key: 'wrong-vault-secret-12345678' })
+    assert.equal(wrongAttempt.status, 403)
+    assert.equal(wrongAttempt.body.code, 'ERR_VAULT_AUTH_FAILED')
+    assert.equal(isVaultConfigured(), false, '校验失败后不得污染运行时密钥状态')
+    assert.equal((await localCall('/api/health')).body.vault_locked, true)
+
+    const unlocked = await localCall('/api/vault/unlock', 'POST', { key: secret })
+    assert.equal(unlocked.status, 200)
+    assert.equal(unlocked.body.ok, true)
+    assert.equal(unlocked.body.unlocked, true)
+    assert.equal(unlocked.body.locked, false)
+    assert.equal(unlocked.body.mode, 'custom')
+    assert.equal(unlocked.body.mentor_count, 2)
+    assert.notEqual(unlocked.body.data_revision, lockedRevision)
+    assert.equal(unlocked.body.data_revision, localApp.dataRevision)
+    assert.equal(localApp.data.metadata.vault_locked, false)
+
+    const afterHealth = await localCall('/api/health')
+    assert.equal(afterHealth.body.vault_locked, false)
+    assert.equal(afterHealth.body.mentor_count, 2)
+    assert.equal(afterHealth.body.data_revision, localApp.dataRevision)
+
+    const afterStatus = await localCall('/api/vault/status')
+    assert.equal(afterStatus.body.locked, false)
+    assert.equal(afterStatus.body.mode, 'custom')
+
+    assert.equal((await localCall('/api/workbench/directory')).body.total, 2)
+    const unlockedQuery = await localCall('/api/tools/query', 'POST', { from: 'mentors', select: ['name', 'college', 'rating'] })
+    assert.equal(unlockedQuery.status, 200)
+    assert.equal(unlockedQuery.body.rows.length, 2)
+    const searchRes = await localCall('/api/tools/search', 'POST', { terms: ['漏洞挖掘'] })
+    assert.equal(searchRes.body.rows.length, 1)
+    assert.equal(searchRes.body.rows[0].name, '测试加密导师甲')
+    assert.equal((await localCall('/api/insights')).body.count, 2)
+  } finally {
+    resetRuntimeVaultState()
+    await localApp.cancelAll()
+    await new Promise(resolve => localServer.close(resolve))
+    await fs.rm(tempVaultDir, { recursive: true, force: true })
+    await fs.rm(tempStoreDir, { recursive: true, force: true })
+  }
+})
+
+test('POLARIS_FORCE_LOCK=1 启动锁定后可通过 { mode: builtin } 解锁完整内置库', async () => {
+  const tempStoreDir = await fs.mkdtemp(path.join(os.tmpdir(), 'polaris-force-unlock-'))
+  const prevForce = process.env.POLARIS_FORCE_LOCK
+  process.env.POLARIS_FORCE_LOCK = '1'
+  resetRuntimeVaultState()
+
+  const lockedApp = createApplication({
+    store: createStore(tempStoreDir),
+    config: createConfig(createStore(tempStoreDir), {}),
+  })
+  const lockedServer = http.createServer(lockedApp.handler)
+  await new Promise(resolve => lockedServer.listen(0, '127.0.0.1', resolve))
+  const localBase = `http://127.0.0.1:${lockedServer.address().port}`
+
+  try {
+    const h1 = await (await fetch(`${localBase}/api/health`)).json()
+    assert.equal(h1.vault_locked, true)
+    assert.equal(h1.mentor_count, 0)
+
+    const unlockRes = await fetch(`${localBase}/api/vault/unlock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'builtin' }),
+    })
+    assert.equal(unlockRes.status, 200)
+    const unlockBody = await unlockRes.json()
+    assert.equal(unlockBody.ok, true)
+    assert.equal(unlockBody.mode, 'builtin')
+    assert.equal(unlockBody.mentor_count, 414)
+    assert.notEqual(unlockBody.data_revision, h1.data_revision)
+  } finally {
+    if (prevForce === undefined) delete process.env.POLARIS_FORCE_LOCK
+    else process.env.POLARIS_FORCE_LOCK = prevForce
+    resetRuntimeVaultState()
+    await lockedApp.cancelAll()
+    await new Promise(resolve => lockedServer.close(resolve))
+    await fs.rm(tempStoreDir, { recursive: true, force: true })
+  }
+})
+
+test('存在不匹配的 MENTOR_VAULT_KEY 时启动锁定，POST /api/vault/unlock { mode: builtin } 可正确解锁并同步全部端点', async () => {
+  const tempStoreDir = await fs.mkdtemp(path.join(os.tmpdir(), 'polaris-stale-key-unlock-'))
+  const prevKey = process.env.MENTOR_VAULT_KEY
+  process.env.MENTOR_VAULT_KEY = 'stale-wrong-env-key-1234567890'
+  resetRuntimeVaultState()
+
+  const lockedApp = createApplication({
+    store: createStore(tempStoreDir),
+    config: createConfig(createStore(tempStoreDir), {}),
+  })
+  const lockedServer = http.createServer(lockedApp.handler)
+  await new Promise(resolve => lockedServer.listen(0, '127.0.0.1', resolve))
+  const localBase = `http://127.0.0.1:${lockedServer.address().port}`
+  const localCall = async (url, method = 'GET', body) => {
+    const response = await fetch(localBase + url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: body && JSON.stringify(body),
+    })
+    return { status: response.status, body: await response.json() }
+  }
+
+  try {
+    const h1 = await localCall('/api/health')
+    assert.equal(h1.status, 200)
+    assert.equal(h1.body.vault_locked, true)
+    assert.equal(h1.body.mentor_count, 0)
+
+    const s1 = await localCall('/api/vault/status')
+    assert.equal(s1.status, 200)
+    assert.equal(s1.body.locked, true)
+    assert.equal(s1.body.mode, 'locked')
+
+    const unlockRes = await localCall('/api/vault/unlock', 'POST', { mode: 'builtin' })
+    assert.equal(unlockRes.status, 200)
+    assert.equal(unlockRes.body.ok, true)
+    assert.equal(unlockRes.body.unlocked, true)
+    assert.equal(unlockRes.body.locked, false)
+    assert.equal(unlockRes.body.mode, 'builtin')
+    assert.equal(unlockRes.body.mentor_count, 414)
+    assert.notEqual(unlockRes.body.data_revision, h1.body.data_revision)
+    assert.equal(unlockRes.body.data_revision, lockedApp.dataRevision)
+
+    const h2 = await localCall('/api/health')
+    assert.equal(h2.status, 200)
+    assert.equal(h2.body.vault_locked, false)
+    assert.equal(h2.body.mentor_count, 414)
+    assert.equal(h2.body.data_revision, lockedApp.dataRevision)
+
+    const s2 = await localCall('/api/vault/status')
+    assert.equal(s2.status, 200)
+    assert.equal(s2.body.locked, false)
+    assert.equal(s2.body.mode, 'builtin')
+
+    const dirRes = await localCall('/api/workbench/directory')
+    assert.equal(dirRes.status, 200)
+    assert.equal(dirRes.body.total, 1309)
+
+    const insightsRes = await localCall('/api/insights')
+    assert.equal(insightsRes.status, 200)
+    assert.equal(insightsRes.body.count, 1309)
+
+    const queryRes = await localCall('/api/tools/query', 'POST', { from: 'mentors', limit: 3 })
+    assert.equal(queryRes.status, 200)
+    assert.equal(queryRes.body.total, 414)
+    assert.equal(queryRes.body.rows.length, 3)
+  } finally {
+    if (prevKey === undefined) delete process.env.MENTOR_VAULT_KEY
+    else process.env.MENTOR_VAULT_KEY = prevKey
+    resetRuntimeVaultState()
+    await lockedApp.cancelAll()
+    await new Promise(resolve => lockedServer.close(resolve))
+    await fs.rm(tempStoreDir, { recursive: true, force: true })
+  }
+})
+
+test('POST /api/vault/unlock 在 reload 失败或仍处于锁定态时回滚运行时状态且绝不返回 200 unlocked', async () => {
+  const tempVaultDir = await fs.mkdtemp(path.join(os.tmpdir(), 'polaris-unlock-rollback-vault-'))
+  const tempStoreDir = await fs.mkdtemp(path.join(os.tmpdir(), 'polaris-unlock-rollback-store-'))
+  const sampleDataset = {
+    metadata: { name: '北极星', year: 2026, colleges: ['网络空间安全学院'], counts: { mentors: 1 }, notes: [] },
+    mentors: [{ mentor_id: 'm1', name: '测试导师', college: '网络空间安全学院', source_ids: ['S1'] }],
+    students: [],
+    exams: [],
+    reviews: [],
+    profiles: [],
+    sources: [{ id: 'S1', title: '测试源', kind: '第三方评价', year: 2026 }],
+  }
+  await fs.writeFile(path.join(tempVaultDir, 'dataset.vault'), sealVaultPayload('dataset', sampleDataset, { keyMode: 'builtin' }))
+
+  resetRuntimeVaultState()
+  const initialLocked = lockedFallbackDataset()
+  initialLocked.mentor_notes = []
+  initialLocked.metadata.profile_colleges = initialLocked.metadata.colleges
+  initialLocked.metadata.coverage = []
+
+  let modeUnderTest = 'throw'
+  const rollbackApp = createApplication({
+    store: createStore(tempStoreDir),
+    config: createConfig(createStore(tempStoreDir), {}),
+    data: initialLocked,
+    reload: () => {
+      if (modeUnderTest === 'throw') {
+        const err = new Error('加密数据包完整性或密钥验证失败 (pdf-reviews)')
+        err.code = 'ERR_VAULT_AUTH_FAILED'
+        throw err
+      }
+      return structuredClone(initialLocked)
+    },
+    vaultDir: tempVaultDir,
+  })
+  const rollbackServer = http.createServer(rollbackApp.handler)
+  await new Promise(resolve => rollbackServer.listen(0, '127.0.0.1', resolve))
+  const localBase = `http://127.0.0.1:${rollbackServer.address().port}`
+
+  try {
+    const beforeRevision = rollbackApp.dataRevision
+    const beforeState = getRuntimeVaultState()
+
+    const failThrow = await fetch(`${localBase}/api/vault/unlock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'builtin' }),
+    })
+    assert.equal(failThrow.status, 403)
+    const failThrowBody = await failThrow.json()
+    assert.equal(failThrowBody.ok, false)
+    assert.equal(failThrowBody.unlocked, false)
+    assert.deepEqual(getRuntimeVaultState(), beforeState)
+    assert.equal(rollbackApp.dataRevision, beforeRevision)
+
+    modeUnderTest = 'still-locked'
+    const failLocked = await fetch(`${localBase}/api/vault/unlock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'builtin' }),
+    })
+    assert.equal(failLocked.status, 500)
+    const failLockedBody = await failLocked.json()
+    assert.equal(failLockedBody.ok, false)
+    assert.equal(failLockedBody.unlocked, false)
+    assert.equal(failLockedBody.code, 'ERR_VAULT_LOCKED')
+    assert.deepEqual(getRuntimeVaultState(), beforeState)
+    assert.equal(rollbackApp.dataRevision, beforeRevision)
+    assert.equal((await (await fetch(`${localBase}/api/health`)).json()).vault_locked, true)
+  } finally {
+    resetRuntimeVaultState()
+    await rollbackApp.cancelAll()
+    await new Promise(resolve => rollbackServer.close(resolve))
+    await fs.rm(tempVaultDir, { recursive: true, force: true })
+    await fs.rm(tempStoreDir, { recursive: true, force: true })
+  }
 })
 

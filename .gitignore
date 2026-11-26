@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist-desktop/
+release/
 .env
 .env.*
 !.env.example
@@ -9,6 +11,10 @@ playwright-report/
 *.log
 .DS_Store
 ._*
+Thumbs.db
+__pycache__/
+*.pyc
+*.pyo
 tmp/
 PDFs/
 
@@ -17,6 +23,13 @@ data/*.json
 *.xlsx
 *.zip
 *.tar.gz
+*.dmg
+*.exe
+*.app/
+*.AppImage
+*.blockmap
+latest*.yml
+builder-debug.yml
 初试结果.md
 复试结果.md
 导师评价.md

@@ -4,6 +4,31 @@ import os from 'node:os'
 import { randomUUID } from 'node:crypto'
 import { publicMessages } from '../lib/presentation.js'
 
+const TRANSIENT_RENAME_CODES = new Set(['EPERM', 'EBUSY', 'EACCES'])
+
+export function defaultSleepSync(ms) {
+  if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+export function renameWithRetry(from, to, {
+  renameSync = fs.renameSync,
+  maxRetries = 5,
+  baseDelayMs = 10,
+  sleepSync = defaultSleepSync,
+} = {}) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      renameSync(from, to)
+      return
+    } catch (error) {
+      if (!TRANSIENT_RENAME_CODES.has(error?.code) || attempt >= maxRetries) {
+        throw error
+      }
+      sleepSync(baseDelayMs * (2 ** attempt))
+    }
+  }
+}
+
 // Keep the storage identity stable so product renames preserve saved connections and chats.
 export function defaultDataDir() {
   if (process.env.MENTOR_DATA_DIR) return process.env.MENTOR_DATA_DIR
@@ -18,16 +43,22 @@ export function addUsage(total, usage) {
   return total
 }
 
-export function createStore(dir = defaultDataDir()) {
+export function createStore(dir = defaultDataDir(), options = {}) {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
   function read(name, fallback) {
-    try { return JSON.parse(fs.readFileSync(path.join(dir, `${name}.json`), 'utf8')) }
+    try { return JSON.parse(fs.readFileSync(path.join(dir, `${name}.json`), 'utf8').replace(/^\uFEFF/, '')) }
     catch (error) { if (error.code === 'ENOENT') return fallback; throw new Error(`无法读取本地 ${name} 数据：${error.message}`) }
   }
   function write(name, value) {
-    const target = path.join(dir, `${name}.json`), tmp = `${target}.tmp`
-    fs.writeFileSync(tmp, JSON.stringify(value, null, 2), { mode: 0o600 })
-    fs.renameSync(tmp, target)
+    const target = path.join(dir, `${name}.json`)
+    const tmp = `${target}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(value, null, 2), { mode: 0o600 })
+      renameWithRetry(tmp, target, options)
+    } catch (error) {
+      try { fs.unlinkSync(tmp) } catch {}
+      throw error
+    }
   }
   const chats = read('chats', []), ledger = read('usage', [])
   const publicChat = chat => ({ id: chat.id, title: chat.title, createdAt: chat.createdAt, updatedAt: chat.updatedAt, messages: publicMessages(chat.messages), usage: chat.usage, context: { compactions: chat.context?.compactions || 0, inputTokens: chat.context?.inputTokens || 0, estimatedTokens: chat.context?.estimatedTokens || 0 } })

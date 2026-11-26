@@ -63,8 +63,88 @@ export async function discoverModels(config, signal) {
 
 export async function listModels(config, signal) { return (await discoverModels(config, signal)).map(model => model.id) }
 
+export async function testConnection(config, signal) {
+  const started = Date.now()
+  const baseUrl = normalizeBaseUrl(config.baseUrl)
+  const timeoutSignal = signal || AbortSignal.timeout(15000)
+  const redactError = msg => String(msg || '连接失败')
+    .replaceAll(config.apiKey || '\u0000', '[已隐藏密钥]')
+    .replace(/Bearer\s+[^\s"']+/gi, 'Bearer [已隐藏]')
+  try {
+    const models = await discoverModels({ ...config, baseUrl }, timeoutSignal)
+    const latencyMs = Date.now() - started
+    const ids = models.map(m => m.id)
+    const recommendedModel = chooseModel(ids, baseUrl) || ids[0] || ''
+    const hasSelected = Boolean(config.model && ids.includes(config.model))
+    const warning = config.model && !hasSelected ? `列表未直接包含模型「${config.model}」，若为服务商自定义别名可继续尝试保存使用` : undefined
+    return {
+      ok: true,
+      latencyMs,
+      modelCount: models.length,
+      recommendedModel,
+      models,
+      ...(warning ? { warning } : {}),
+      message: `连接成功（${latencyMs}ms）：检测到 ${models.length} 个模型${recommendedModel ? `，推荐 ${recommendedModel}` : ''}`,
+    }
+  } catch (error) {
+    if ([404, 405].includes(error?.status) && config.model) {
+      try {
+        const probe = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` },
+          body: JSON.stringify({ model: config.model, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1, stream: false }),
+          signal: timeoutSignal,
+        })
+        const latencyMs = Date.now() - started
+        if (probe.ok) {
+          return {
+            ok: true,
+            latencyMs,
+            modelCount: 0,
+            recommendedModel: config.model,
+            models: [],
+            warning: '该服务商未开放 /models 列表，但对话接口可用',
+            message: `连接成功（${latencyMs}ms）：对话接口可用`,
+          }
+        }
+        const probeErr = await providerError(probe, config.apiKey)
+        return { ok: false, latencyMs, status: probeErr.status, message: redactError(probeErr.message) }
+      } catch (probeFail) {
+        error = probeFail
+      }
+    }
+    const latencyMs = Date.now() - started
+    const rawMsg = String(error?.cause?.code || error?.code || error?.name || error?.message || '')
+    let message = error?.message || '连接失败，请检查网络或配置'
+    if (error?.name === 'TimeoutError' || /timeout/i.test(rawMsg)) {
+      message = '连接超时（15 秒内未响应），请检查网络代理或 API URL 是否可达。'
+    } else if (/ECONNREFUSED|ENOTFOUND|ECONNRESET|fetch failed/i.test(rawMsg)) {
+      message = /11434/.test(baseUrl)
+        ? '无法连接本地 Ollama（11434 端口），请先确认 Ollama 已启动。'
+        : '无法连接到目标 API 地址，请检查 URL 拼写、网络或代理设置。'
+    } else if (error?.status === 403) {
+      message = '接口拒绝访问（403），请确认 API Key 权限或网络地区限制。'
+    } else if (error?.status === 404) {
+      message = '接口地址返回 404，请检查 API URL 是否需要补充或去掉 /v1。'
+    }
+    return {
+      ok: false,
+      latencyMs,
+      ...(error?.status ? { status: error.status } : {}),
+      message: redactError(message),
+    }
+  }
+}
+
 export function chooseModel(models, baseUrl) {
-  if (new URL(baseUrl).hostname === 'api.deepseek.com' && models.includes('deepseek-flash')) return 'deepseek-flash'
+  let hostname = ''
+  try {
+    hostname = new URL(baseUrl).hostname
+  } catch {}
+  if (hostname === 'api.deepseek.com') {
+    if (models.includes('deepseek-chat')) return 'deepseek-chat'
+    if (models.includes('deepseek-flash')) return 'deepseek-flash'
+  }
   return models.find(id => !/embed|tts|whisper|image|audio|moderation/i.test(id)) || models[0]
 }
 

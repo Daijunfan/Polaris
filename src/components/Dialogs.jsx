@@ -1,10 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, ExternalLink, Eye, EyeOff, KeyRound, Link2, LoaderCircle, Search, SlidersHorizontal } from 'lucide-react'
+import { Check, ChevronDown, ExternalLink, Eye, EyeOff, KeyRound, Link2, LoaderCircle, Lock, Search, ShieldAlert, SlidersHorizontal } from 'lucide-react'
 import { api, modelLabel, tokenNumber } from '../api.js'
 import { compactNumber, effortLabel } from '../presentation.js'
 import Dialog from './Dialog.jsx'
 import DataTable from './DataTable.jsx'
 import { sourceNumber } from '../../lib/presentation.js'
+
+function hostOf(url) {
+  try { return new URL(String(url || '').trim()).host.toLowerCase() } catch { return '' }
+}
 
 export function RenameConversation({ chat, onSave, onClose }) {
   const [title,setTitle] = useState(chat.title),[saving,setSaving] = useState(false),[error,setError] = useState('')
@@ -19,28 +23,119 @@ export function Trash({ onRestore, onClose }) {
   return <Dialog title="回收站" className="trash-modal" onClose={onClose}>{error&&<p className="form-error" role="alert">{error}</p>}{items==null?<p className="empty-state">加载中…</p>:!items.length?<p className="empty-state">回收站为空</p>:<ul className="trash-list">{items.map(item=><li key={item.id}><div><strong>{item.title}</strong><small>{new Date(item.deletedAt).toLocaleString('zh-CN')}</small></div><button className="secondary-button" onClick={async()=>{try{await onRestore(item.id);setItems(rows=>rows.filter(row=>row.id!==item.id))}catch(e){setError(e.message)}}}>恢复</button></li>)}</ul>}</Dialog>
 }
 
+const PROVIDER_PRESETS = [
+  { id: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat', hint: '推荐 · 性价比高，开箱适配工具调用' },
+  { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini', hint: 'OpenAI 官方接口' },
+  { id: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-chat', hint: '聚合多款主流大模型' },
+  { id: 'siliconflow', label: '硅基流动', baseUrl: 'https://api.siliconflow.cn/v1', model: 'deepseek-ai/DeepSeek-V3', hint: '国内直连加速服务商' },
+  { id: 'ollama', label: '本地 Ollama', baseUrl: 'http://127.0.0.1:11434/v1', model: 'qwen2.5:7b', hint: '本机离线模型（11434 端口，无需填写密钥）', isLocal: true },
+  { id: 'custom', label: '自定义', baseUrl: '', model: '', hint: '任意 OpenAI 兼容接口地址' },
+]
+
+function detectPresetId(url) {
+  const norm = String(url || '').trim().replace(/\/+$/, '').toLowerCase()
+  const hit = PROVIDER_PRESETS.find(p => p.baseUrl && p.baseUrl.toLowerCase() === norm)
+  return hit ? hit.id : 'custom'
+}
+
 function ConnectionForm({ config, onSaved }) {
   const [baseUrl, setBaseUrl] = useState(config.baseUrl), [apiKey, setApiKey] = useState(''), [model, setModel] = useState(config.model || '')
-  const [showKey, setShowKey] = useState(false), [loading, setLoading] = useState(false), [error, setError] = useState('')
+  const [showKey, setShowKey] = useState(false), [loading, setLoading] = useState(false), [testing, setTesting] = useState(false)
+  const [error, setError] = useState(''), [testResult, setTestResult] = useState(null)
   const [models, setModels] = useState(config.models || []), [loadingModels, setLoadingModels] = useState(false)
+  const lastModelsHost = useRef(hostOf(config.baseUrl)), modelTouched = useRef(Boolean(config.model))
+  const activePreset = detectPresetId(baseUrl)
+  const activePresetMeta = PROVIDER_PRESETS.find(p => p.id === activePreset)
+
+  function applyPreset(preset) {
+    setError(''); setTestResult(null)
+    if (preset.id === 'custom') return
+    setBaseUrl(preset.baseUrl)
+    const nextHost = hostOf(preset.baseUrl)
+    if (nextHost && nextHost !== lastModelsHost.current) {
+      setModels([])
+      lastModelsHost.current = nextHost
+    }
+    if (preset.model) {
+      setModel(preset.model)
+      modelTouched.current = false
+    }
+  }
+
   async function loadModels() {
-    setLoadingModels(true); setError('')
-    try { setModels((await api('/models', { method: 'POST', body: { baseUrl, apiKey } })).models) }
+    setLoadingModels(true); setError(''); setTestResult(null)
+    try {
+      const result = await api('/models', { method: 'POST', body: { baseUrl, apiKey } })
+      setModels(result.models)
+      lastModelsHost.current = hostOf(baseUrl)
+    }
     catch (e) { setError(e.message) }
     finally { setLoadingModels(false) }
   }
+
+  async function handleTest() {
+    setTesting(true); setError(''); setTestResult(null)
+    try {
+      const result = await api('/config/test', { method: 'POST', body: { baseUrl, apiKey, model } })
+      if (result.models?.length) {
+        setModels(result.models)
+        lastModelsHost.current = hostOf(baseUrl)
+      }
+      if (!model && result.recommendedModel) {
+        setModel(result.recommendedModel)
+        modelTouched.current = false
+      }
+      if (result.ok) {
+        setTestResult(result)
+      } else {
+        setError(result.message || '连接失败，请检查地址与密钥')
+      }
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setTesting(false)
+    }
+  }
+
   async function save(e) {
-    e.preventDefault(); setLoading(true); setError('')
+    e.preventDefault(); setLoading(true); setError(''); setTestResult(null)
     try { onSaved(await api('/config', { method: 'PUT', body: { baseUrl, apiKey, model } })) }
     catch (e) { setError(e.message) }
     finally { setLoading(false) }
   }
+
+  const keyPlaceholder = activePreset === 'ollama'
+    ? '本地 Ollama 可留空（默认无需密钥）'
+    : config.hasKey
+      ? `已保存（${config.maskedKey || '****'}），留空保留现有密钥`
+      : '输入 API Key（例如 sk-...）'
+
   return <form className="settings-form" onSubmit={save}><div className="settings-section-heading"><div><h3>模型连接</h3></div><span className={`connection-state ${config.configured ? 'configured' : ''}`}>{config.configured ? <><Check size={12}/>已配置</> : '未配置'}</span></div>
-    <label htmlFor="api-url">API URL</label><div className="field-with-icon"><Link2 size={15}/><input id="api-url" type="url" required value={baseUrl} onChange={e => { setBaseUrl(e.target.value); setModels([]); setModel('') }} placeholder="https://api.deepseek.com" spellCheck={false}/></div>
-    <label htmlFor="api-key">API Key{config.hasKey && <span className="saved-label"><Check size={12}/>已保存</span>}</label><div className="field-with-icon"><KeyRound size={15}/><input id="api-key" type={showKey ? 'text' : 'password'} value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={config.hasKey ? '留空保留现有密钥' : '输入 API Key'} autoComplete="off" spellCheck={false}/><button type="button" className="icon-button" aria-label={showKey ? '隐藏密钥' : '显示密钥'} onClick={() => setShowKey(!showKey)}>{showKey ? <EyeOff size={16}/> : <Eye size={16}/>}</button></div>
-    <div className="model-field-heading"><label htmlFor="default-model">模型</label><button type="button" className="text-button" onClick={loadModels} disabled={loadingModels}>{loadingModels ? <><LoaderCircle className="spin" size={13}/>读取中</> : '获取模型列表'}</button></div><div className="select-field"><select id="default-model" value={model} onChange={e => setModel(e.target.value)}><option value="">自动选择</option>{model && !models.some(m => m.id === model) && <option value={model}>{model}</option>}{models.map(m => <option key={m.id} value={m.id}>{modelLabel(m)}</option>)}</select><ChevronDown size={14}/></div>
-    <details className="advanced-settings"><summary>自定义模型 ID<ChevronDown size={13}/></summary><label htmlFor="model-id">服务商模型 ID</label><input id="model-id" value={model} onChange={e => setModel(e.target.value)} placeholder="例如 deepseek-flash"/><small>所选模型需要支持工具调用。</small></details>
-    {error && <div className="form-error" role="alert">{error}</div>}<div className="settings-form-footer"><button className="primary-button" type="submit" disabled={loading}>{loading ? <LoaderCircle className="spin" size={15}/> : <Check size={15}/>} {loading ? '正在验证…' : '连接并保存'}</button></div>
+    <div className="preset-section">
+      <span className="preset-section-label">快速选择服务商</span>
+      <div className="provider-presets" role="group" aria-label="常用服务商预设">
+        {PROVIDER_PRESETS.map(preset => (
+          <button
+            key={preset.id}
+            type="button"
+            className={`provider-preset-pill${activePreset === preset.id ? ' active' : ''}`}
+            aria-pressed={activePreset === preset.id}
+            onClick={() => applyPreset(preset)}
+          >
+            {preset.label}
+          </button>
+        ))}
+      </div>
+      {activePresetMeta?.hint && <small className="preset-hint">{activePresetMeta.hint}</small>}
+    </div>
+    <label htmlFor="api-url">API URL</label><div className="field-with-icon"><Link2 size={15}/><input id="api-url" type="url" required value={baseUrl} onChange={e => { const next = e.target.value; setBaseUrl(next); setTestResult(null); const nextHost = hostOf(next); if (nextHost && nextHost !== lastModelsHost.current) { setModels([]); if (!modelTouched.current) setModel(''); lastModelsHost.current = nextHost } }} placeholder="https://api.deepseek.com" spellCheck={false}/></div>
+    <label htmlFor="api-key">API Key{config.hasKey && <span className="saved-label"><Check size={12}/>已保存{config.maskedKey ? `：${config.maskedKey}` : ''}</span>}</label><div className="field-with-icon"><KeyRound size={15}/><input id="api-key" type={showKey ? 'text' : 'password'} value={apiKey} onChange={e => { setApiKey(e.target.value); setTestResult(null) }} placeholder={keyPlaceholder} autoComplete="off" spellCheck={false}/><button type="button" className="icon-button" aria-label={showKey ? '隐藏密钥' : '显示密钥'} onClick={() => setShowKey(!showKey)}>{showKey ? <EyeOff size={16}/> : <Eye size={16}/>}</button></div>
+    <div className="model-field-heading"><label htmlFor="default-model">模型</label><button type="button" className="text-button" onClick={loadModels} disabled={loadingModels || testing}>{loadingModels ? <><LoaderCircle className="spin" size={13}/>读取中</> : '获取模型列表'}</button></div><div className="select-field"><select id="default-model" value={model} onChange={e => { modelTouched.current = true; setModel(e.target.value) }}><option value="">自动选择</option>{model && !models.some(m => m.id === model) && <option value={model}>{model}</option>}{models.map(m => <option key={m.id} value={m.id}>{modelLabel(m)}</option>)}</select><ChevronDown size={14}/></div>
+    <details className="advanced-settings"><summary>自定义模型 ID<ChevronDown size={13}/></summary><label htmlFor="model-id">服务商模型 ID</label><input id="model-id" value={model} onChange={e => { modelTouched.current = true; setModel(e.target.value) }} placeholder="例如 deepseek-chat"/><small>所选模型需要支持工具调用。</small></details>
+    {testResult && <div className="form-success" role="status"><Check size={15}/><span>{testResult.message}{testResult.warning ? `（${testResult.warning}）` : ''}</span></div>}
+    {error && <div className="form-error" role="alert">{error}</div>}
+    <p className="field-note settings-privacy-note">密钥与接口配置仅保存在本机应用数据目录，保存后立即生效，不会写入项目代码。</p>
+    <div className="settings-form-footer"><button type="button" className="secondary-button" onClick={handleTest} disabled={testing || loading}>{testing ? <><LoaderCircle className="spin" size={14}/>测试中…</> : '测试连接'}</button><button className="primary-button" type="submit" disabled={loading || testing}>{loading ? <LoaderCircle className="spin" size={15}/> : <Check size={15}/>} {loading ? '正在验证…' : '连接并保存'}</button></div>
   </form>
 }
 
@@ -103,6 +198,18 @@ export function Sources({ data, selected, onClose }) {
     </li>)}</ol>
     {focused&&<div className="source-content">
       {error?<p className="form-error" role="alert">{error}</p>:!loaded?<p className="source-loading" role="status">载入资料内容…</p>:<>
+        {(loaded.truncated || loaded.protection_notice) && (
+          <div className="source-protection-banner" role="note" aria-label={loaded.truncated ? '预览截断与资料保护提示' : '资料访问保护提示'}>
+            <div className="source-protection-head">
+              <ShieldAlert size={15} aria-hidden="true"/>
+              <strong>{loaded.truncated ? '预览已按保护策略截断' : '资料访问保护提示'}</strong>
+              {loaded.truncated && loaded.total_entries != null && (
+                <span className="source-truncation-badge">显示前 {loaded.entries.length} / 共 {loaded.total_entries} 条</span>
+              )}
+            </div>
+            {loaded.protection_notice && <p>{loaded.protection_notice}</p>}
+          </div>
+        )}
         {loaded.entries.length>5&&<label className="source-search"><Search size={16}/><input aria-label="在本资料内查找" placeholder="输入导师姓名或关键词" value={query} onChange={event=>setQuery(event.target.value)}/><span>{entries.length} 条</span></label>}
         {entries.map((entry,index)=><details className="source-entry" key={index} open={entries.length===1}><summary>{entry.title}{entry.rating!=null&&<small className="source-entry-rating" title="培养体验评分">{entry.rating} / 5</small>}</summary><div>{entry.text}</div></details>)}
         {!!loaded.entries.length&&!entries.length&&<p className="empty-state">没有匹配的内容</p>}
@@ -111,5 +218,70 @@ export function Sources({ data, selected, onClose }) {
       </>}
     </div>}
     {!sources.length&&<p className="empty-state">没有匹配的来源</p>}
+  </Dialog>
+}
+
+export function VaultUnlockDialog({ status, onUnlocked, onClose }) {
+  const [key, setKey] = useState(''), [showKey, setShowKey] = useState(false), [unlocking, setUnlocking] = useState(null), [error, setError] = useState('')
+  const inputRef = useRef()
+  async function unlockBuiltin() {
+    setUnlocking('builtin'); setError('')
+    try {
+      const result = await api('/vault/unlock', { method: 'POST', body: { mode: 'builtin' } })
+      await onUnlocked(result)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setUnlocking(null)
+    }
+  }
+  async function unlockCustom(e) {
+    e.preventDefault()
+    const trimmed = key.trim()
+    if (!trimmed) { setError('请输入解锁密钥'); inputRef.current?.focus(); return }
+    setUnlocking('custom'); setError('')
+    try {
+      const result = await api('/vault/unlock', { method: 'POST', body: { key: trimmed, mode: 'custom' } })
+      await onUnlocked(result)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setUnlocking(null)
+    }
+  }
+  return <Dialog title="解锁导师加密数据库" className="vault-unlock-modal" onClose={onClose}>
+    <p className="modal-intro">仓库中的导师与评价数据集采用加密存储，请通过本开源项目内置解密或自定义密钥解锁后查看与检索。</p>
+    <div className="vault-unlock-meta">
+      <Lock size={14} aria-hidden="true"/>
+      <span>{status?.cipher || 'AES-256-GCM+scrypt+Brotli'}</span>
+      <span>·</span>
+      <span>{status?.vaults || 5} 个加密数据集</span>
+    </div>
+    <div className="vault-unlock-builtin-card">
+      <div>
+        <strong>开源项目内置模式</strong>
+        <p>使用北极星内置项目密钥直接解密随仓分发的开源加密库，无需额外配置密钥。</p>
+      </div>
+      <button type="button" className="primary-button" disabled={unlocking !== null} onClick={unlockBuiltin}>
+        {unlocking === 'builtin' ? <><LoaderCircle className="spin" size={15}/>正在解锁…</> : '使用内置开源模式解锁'}
+      </button>
+    </div>
+    <div className="vault-unlock-divider" aria-hidden="true"><span>或使用自定义密钥</span></div>
+    <form className="settings-form" onSubmit={unlockCustom}>
+      <label htmlFor="vault-unlock-key">自定义解锁密钥 (MENTOR_VAULT_KEY)</label>
+      <div className="field-with-icon">
+        <KeyRound size={15}/>
+        <input ref={inputRef} id="vault-unlock-key" type={showKey ? 'text' : 'password'} value={key} onChange={e => setKey(e.target.value)} placeholder="输入至少 16 位自定义密钥" autoComplete="off" spellCheck={false}/>
+        <button type="button" className="icon-button" aria-label={showKey ? '隐藏密钥' : '显示密钥'} onClick={() => setShowKey(s => !s)}>{showKey ? <EyeOff size={16}/> : <Eye size={16}/>}</button>
+      </div>
+      <small>适用于使用自定义 <code>MENTOR_VAULT_KEY</code> 封装的私有数据仓。</small>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <div className="dialog-actions">
+        <button type="button" className="secondary-button" disabled={unlocking !== null} onClick={onClose}>暂不解锁</button>
+        <button type="submit" className="secondary-button vault-unlock-submit" disabled={unlocking !== null || !key.trim()}>
+          {unlocking === 'custom' ? <><LoaderCircle className="spin" size={15}/>验证中…</> : '验证密钥并解锁'}
+        </button>
+      </div>
+    </form>
   </Dialog>
 }

@@ -6,17 +6,27 @@ import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 import { publicActivity,publicArtifact, publicMessage, publicSource, publicSourceContent, publicText, publicTool } from '../lib/presentation.js'
 import { loadData } from '../lib/data.js'
-import { isVaultConfigured, setRuntimeVaultKey, VAULT_NAMES } from '../lib/vault.js'
+import {
+  getRuntimeVaultState,
+  isVaultConfigured,
+  restoreRuntimeVaultState,
+  setRuntimeVaultKey,
+  unlockBuiltinRuntime,
+  verifyVaultKey,
+  vaultFilePath,
+  VAULT_NAMES,
+} from '../lib/vault.js'
 import {answerPolicy} from '../lib/answer-policy.js'
 import { createToolRuntime, toolDefinitions } from '../lib/tools.js'
 import { createStore } from './store.js'
 import { createConfig } from './config.js'
-import { chooseModel, discoverModels } from './provider.js'
+import { chooseModel, discoverModels, testConnection } from './provider.js'
 import { runAgent } from './agent.js'
 import {visibleHistory} from './context.js'
 import {createWorkbench} from './workbench.js'
 import {workbenchToolDefinition,profileToolDefinition} from './workbench-tool.js'
 import {createProfiles} from './profile.js'
+import {createExportService} from './export.js'
 import {createMentorIndex} from '../lib/search.js'
 import {mentorInsight} from '../lib/insights.js'
 import {profileOptions} from '../lib/profile.js'
@@ -39,29 +49,54 @@ async function readBody(req) {
   catch { throw new Error('请求体需要是合法 JSON') }
 }
 
-export function createApplication({ data = loadData(), store = createStore(), config = createConfig(store), frontend, staticDirectory = dist } = {}) {
-  const active = new Map(), apiTools = createToolRuntime(data),workbench=createWorkbench({store,data}),profiles=createProfiles(store)
-  let insightCache=null
+export function createApplication({ data = loadData(), store = createStore(), config = createConfig(store), frontend, staticDirectory = dist, reload = () => loadData(), vaultDir } = {}) {
+  const active = new Map(), profiles = createProfiles(store)
+  let currentData = data
+  let apiTools, workbench, insightCache = null, revisionCounter = 0, dataRevision
+  const exportService = createExportService({ store, getData: () => currentData, getWorkbench: () => workbench, getProfile: () => profiles.read() })
+  function computeRevision(nextData, nextTools, counter) {
+    return createHash('sha256').update(JSON.stringify({
+      version,
+      execution: 'ordinary-chat-v9',
+      revision: counter,
+      data: nextData,
+      tools: toolDefinitions,
+      catalog: nextTools.execute('catalog').datasets,
+      answerPolicy,
+    })).digest('hex')
+  }
+  function applyData(nextData) {
+    currentData = nextData
+    apiTools = createToolRuntime(currentData)
+    workbench = createWorkbench({ store, data: currentData })
+    insightCache = null
+    dataRevision = computeRevision(currentData, apiTools, revisionCounter)
+  }
+  function reloadData() {
+    const nextData = reload()
+    revisionCounter += 1
+    applyData(nextData)
+  }
+  applyData(data)
   function insights(){
     if(insightCache)return insightCache
-    const names=[...new Set(data.mentors.map(mentor=>mentor.name))]
+    const names=[...new Set(currentData.mentors.map(mentor=>mentor.name))]
     const pages=new Map()
-    const normalizeCollege=college=>(data.metadata?.colleges||[]).find(name=>college?.startsWith(name+'（')||college?.startsWith(name+'('))||college
-    for(const page of data.profiles||[]){
+    const normalizeCollege=college=>(currentData.metadata?.colleges||[]).find(name=>college?.startsWith(name+'（')||college?.startsWith(name+'('))||college
+    for(const page of currentData.profiles||[]){
       const normCollege=normalizeCollege(page.college)
       for(const key of [page.mentor_id,`${normCollege}:${page.name}`,`${page.college}:${page.name}`].filter(Boolean)){
         if(!pages.has(key)||page.source_type==='学校官网')pages.set(key,page)
       }
     }
     const mentors={}
-    for(const row of createMentorIndex(data).rows){
+    for(const row of createMentorIndex(currentData).rows){
       const insight=mentorInsight(row,names),page=pages.get(row.mentor_id)||pages.get(`${row.college}:${row.name}`)
       const doctoralPrograms=[page?.doctoral_academic&&`学博：${page.doctoral_academic}`,page?.doctoral_professional&&`专博：${page.doctoral_professional}`].filter(Boolean).join(' · ')||null
       mentors[`${row.college}:${row.name}`]={key:row.mentor_id||'candidate-'+createHash('sha256').update((row.college||'')+':'+row.name).digest('hex').slice(0,12),name:row.name,college:row.college,group:row.group||null,rating:row.rating??null,doctoral:Boolean(row.can_supervise_doctoral),doctoralPrograms,title:page?.professional_title||row.professional_title||null,email:page?.contact_email||null,homepage:page?.source_type==='学校官网'?page.url:null,directions:row.personal_directions||page?.research_areas||row.research_areas||row.directions||null,academicSummary:row.academic_summary||null,enrollmentSignal:row.enrollment_signal||null,biography:page?.biography?.slice(0,480)||null,projects:page?.projects?.slice(0,520)||null,achievements:page?.achievements?.slice(0,520)||null,admissions:page?.admissions?.slice(0,260)||null,scoreFirstMax:row.score_first_max??null,students:row.student_count??null,exam:row.exam_count??null,recommended:row.recommended_count??null,...insight}
     }
     return insightCache={mentors,count:Object.keys(mentors).length}
   }
-  const dataRevision = createHash('sha256').update(JSON.stringify({ version,execution:'ordinary-chat-v9', data, tools: toolDefinitions, catalog: apiTools.execute('catalog').datasets,answerPolicy })).digest('hex')
   let shuttingDown = false
   const snapshot = chat => ({ ...store.publicChat(chat), running: active.has(chat.id) })
   function launch(chat, text, replacesMessageId) {
@@ -84,7 +119,7 @@ export function createApplication({ data = loadData(), store = createStore(), co
       if (event === 'error') payload = { ...payload, error: publicText(payload.error) }
       for (const sink of run.sinks) sink(event, payload)
     }
-    run.promise = Promise.resolve().then(() => runAgent({ chat, text, replacesMessageId, data, dataRevision, store,workbench,profiles, config: config.effective(), emit, signal: run.controller.signal }))
+    run.promise = Promise.resolve().then(() => runAgent({ chat, text, replacesMessageId, data: currentData, dataRevision, store,workbench,profiles, exportService, config: config.effective(), emit, signal: run.controller.signal }))
       .then(message => emit('done', { message, usage: chat.usage, chat: { ...snapshot(chat), running: false } }))
       .catch(error => emit('error', { error: run.controller.signal.reason === 'shutdown' ? '服务重启中断了生成，可以直接重试' : run.controller.signal.aborted ? '已停止生成' : config.redact(error.message), canceled: run.controller.signal.aborted, chat: { ...snapshot(chat), running: false } }))
       .finally(() => { active.delete(chat.id); emit('end') })
@@ -130,15 +165,101 @@ export function createApplication({ data = loadData(), store = createStore(), co
       // This is a local, single-user app. Browser requests must come from this origin.
       if(!['localhost','127.0.0.1','[::1]'].includes(new URL(`http://${req.headers.host}`).hostname))return json(res,403,{error:'本地接口仅允许本机地址访问'})
       if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return json(res, 403, { error: '仅允许当前应用页面访问本地 API' })
-      if (req.method === 'GET' && route === '/api/health') return json(res, 200, { status: 'ok', name: APP_NAME, version, vaultLocked: Boolean(data?.metadata?.vault_locked) })
-      if (req.method === 'GET' && route === '/api/vault/status') return json(res, 200, { locked: Boolean(data?.metadata?.vault_locked), configured: isVaultConfigured(), cipher: 'AES-256-GCM+scrypt+Brotli', vaults: VAULT_NAMES.length })
+      if (req.method === 'GET' && route === '/api/health') {
+        return json(res, 200, {
+          ok: true,
+          status: 'ok',
+          name: APP_NAME,
+          version,
+          vault_locked: Boolean(currentData?.metadata?.vault_locked),
+          mentor_count: currentData?.mentors?.length ?? 0,
+          data_revision: dataRevision,
+        })
+      }
+      if (req.method === 'GET' && route === '/api/vault/status') {
+        const locked = Boolean(currentData?.metadata?.vault_locked)
+        const mode = currentData?.metadata?.vault_mode || (locked ? 'locked' : (isVaultConfigured() ? 'custom' : 'builtin'))
+        const datasets = VAULT_NAMES.map(name => ({
+          name,
+          sealed: fs.existsSync(vaultFilePath(name, vaultDir)),
+        }))
+        return json(res, 200, {
+          locked,
+          mode,
+          configured: isVaultConfigured(),
+          datasets,
+          cipher: 'AES-256-GCM+scrypt+Brotli',
+          vaults: VAULT_NAMES.length,
+        })
+      }
       if (req.method === 'POST' && route === '/api/vault/unlock') {
-        const { vaultKey } = await readBody(req)
-        setRuntimeVaultKey(vaultKey)
-        const unlocked = loadData()
-        Object.assign(data, unlocked)
-        insightCache = null
-        return json(res, 200, { locked: false, mentors: data.mentors.length, reviews: data.reviews.length })
+        const body = await readBody(req)
+        const mode = body?.mode === 'builtin' ? 'builtin' : 'custom'
+        const rawKey = body?.key ?? body?.vaultKey
+        const trimmedKey = typeof rawKey === 'string' ? rawKey.trim() : ''
+        if (mode !== 'builtin' && trimmedKey.length < 16) {
+          return json(res, 400, {
+            ok: false,
+            error: 'MENTOR_VAULT_KEY 长度不足（需至少 16 字符高熵密钥）',
+            code: 'ERR_VAULT_LOCKED',
+          })
+        }
+        try {
+          verifyVaultKey(trimmedKey, { dir: vaultDir, allowBuiltin: mode === 'builtin' })
+        } catch (error) {
+          if (error.code === 'ERR_VAULT_AUTH_FAILED') {
+            return json(res, 403, { ok: false, error: config.redact(error.message), code: error.code })
+          }
+          if (error.code === 'ERR_VAULT_LOCKED') {
+            return json(res, 400, { ok: false, error: config.redact(error.message), code: error.code })
+          }
+          if (['ENOENT', 'ERR_VAULT_CORRUPT', 'ERR_VAULT_MAGIC'].includes(error.code)) {
+            return json(res, 500, { ok: false, error: config.redact(error.message), code: error.code })
+          }
+          throw error
+        }
+        const prevVaultState = getRuntimeVaultState()
+        const prevData = currentData
+        const prevRevisionCounter = revisionCounter
+        if (mode === 'builtin' && !trimmedKey) {
+          unlockBuiltinRuntime()
+        } else {
+          setRuntimeVaultKey(trimmedKey)
+        }
+        try {
+          reloadData()
+        } catch (error) {
+          restoreRuntimeVaultState(prevVaultState)
+          revisionCounter = prevRevisionCounter
+          if (['ERR_VAULT_AUTH_FAILED', 'ERR_VAULT_LOCKED'].includes(error.code)) {
+            return json(res, 403, { ok: false, unlocked: false, error: config.redact(error.message), code: error.code })
+          }
+          if (['ENOENT', 'ERR_VAULT_CORRUPT', 'ERR_VAULT_MAGIC'].includes(error.code)) {
+            return json(res, 500, { ok: false, unlocked: false, error: config.redact(error.message), code: error.code })
+          }
+          return json(res, 500, { ok: false, unlocked: false, error: config.redact(error.message || '数据重载失败'), ...(error.code ? { code: error.code } : {}) })
+        }
+        if (currentData?.metadata?.vault_locked) {
+          restoreRuntimeVaultState(prevVaultState)
+          revisionCounter = prevRevisionCounter
+          applyData(prevData)
+          return json(res, 500, {
+            ok: false,
+            unlocked: false,
+            error: '加密数据库解锁后仍处于锁定状态，已回滚运行时状态',
+            code: 'ERR_VAULT_LOCKED',
+          })
+        }
+        return json(res, 200, {
+          ok: true,
+          unlocked: true,
+          locked: false,
+          mode: currentData?.metadata?.vault_mode || mode,
+          mentor_count: currentData?.mentors?.length ?? 0,
+          mentors: currentData?.mentors?.length ?? 0,
+          reviews: currentData?.reviews?.length ?? 0,
+          data_revision: dataRevision,
+        })
       }
       if(req.method==='GET'&&route==='/api/workbench')return json(res,200,workbench.snapshot())
       if(req.method==='POST'&&route==='/api/membership/experience')return json(res,200,workbench.setExperience((await readBody(req)).tier))
@@ -148,12 +269,36 @@ export function createApplication({ data = loadData(), store = createStore(), co
       if(req.method==='DELETE'&&route==='/api/profile')return json(res,200,{profile:profiles.reset(),options:profileOptions})
       if(req.method==='GET'&&route==='/api/workbench/directory')return json(res,200,workbench.directory(url.searchParams.get('q')||'',url.searchParams.get('college')||'',Number(url.searchParams.get('offset')||0),url.searchParams.get('sort')||''))
       if(req.method==='GET'&&route==='/api/workbench/export'){
-        const result=workbench.report(url.searchParams.get('format')||'html',url.searchParams.get('snapshot')||undefined,{scope:url.searchParams.get('scope')||undefined})
+        const fmt=(url.searchParams.get('format')||'html').toLowerCase()
+        const snap=url.searchParams.get('snapshot')||undefined
+        const scope=url.searchParams.get('scope')||undefined
+        if(['xlsx','pdf','docx'].includes(fmt)){
+          const result=await exportService.resolveExport({format:fmt,kind:scope==='library'?'preset':'comparison',preset:scope==='library'?'library':undefined,snapshot:snap,scope})
+          res.writeHead(200,{'Content-Type':result.type,'Cache-Control':'no-store','X-Export-Filename':encodeURIComponent(result.filename),'Content-Disposition':"attachment; filename=\"polaris-export."+result.extension+"\"; filename*=UTF-8''"+encodeURIComponent(result.filename)});res.end(result.body);return
+        }
+        const result=workbench.report(fmt,snap,{scope})
         res.writeHead(200,{'Content-Type':result.type,'Cache-Control':'no-store','Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent('导师对比报告.'+result.extension)});res.end(result.body);return
       }
       if(req.method==='POST'&&route==='/api/workbench/export'){
-        const input=await readBody(req),result=workbench.report(input.format||'html',input.snapshot,{scope:input.scope,mentors:input.keys})
+        const input=await readBody(req),fmt=String(input.format||'html').toLowerCase()
+        if(['xlsx','pdf','docx'].includes(fmt)){
+          const result=await exportService.resolveExport({format:fmt,kind:input.scope==='library'?'mentors':'comparison',snapshot:input.snapshot,scope:input.scope,keys:input.keys,title:input.scope==='library'?'导师候选库':'导师对比报告'})
+          res.writeHead(200,{'Content-Type':result.type,'Cache-Control':'no-store','X-Export-Filename':encodeURIComponent(result.filename),'Content-Disposition':"attachment; filename=\"polaris-export."+result.extension+"\"; filename*=UTF-8''"+encodeURIComponent(result.filename)});res.end(result.body);return
+        }
+        const result=workbench.report(fmt,input.snapshot,{scope:input.scope,mentors:input.keys})
         res.writeHead(200,{'Content-Type':result.type,'Cache-Control':'no-store','Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent('导师资料.'+result.extension)});res.end(result.body);return
+      }
+      if(req.method==='POST'&&route==='/api/export'){
+        const input=await readBody(req)
+        const result=await exportService.resolveExport(input,apiTools)
+        res.writeHead(200,{'Content-Type':result.type,'Cache-Control':'no-store','X-Export-Filename':encodeURIComponent(result.filename),'Content-Disposition':"attachment; filename=\"polaris-export."+result.extension+"\"; filename*=UTF-8''"+encodeURIComponent(result.filename)})
+        res.end(result.body);return
+      }
+      const exportFileMatch=route.match(/^\/api\/exports\/([\w-]+)$/)
+      if(req.method==='GET'&&exportFileMatch){
+        const file=exportService.getExport(exportFileMatch[1])
+        res.writeHead(200,{'Content-Type':file.type,'Cache-Control':'no-store','X-Export-Filename':encodeURIComponent(file.name),'Content-Disposition':"attachment; filename=\"polaris-export."+file.format+"\"; filename*=UTF-8''"+encodeURIComponent(file.name)})
+        res.end(file.body);return
       }
       if(req.method==='POST'&&route==='/api/workbench/items')return json(res,200,workbench.addItems((await readBody(req)).mentors))
       if(req.method==='PUT'&&route==='/api/workbench/comparison')return json(res,200,workbench.setComparison((await readBody(req)).mentors))
@@ -184,18 +329,24 @@ export function createApplication({ data = loadData(), store = createStore(), co
         if(req.method==='PATCH'&&kind==='lists')return json(res,200,workbench.updateList(id,await readBody(req)))
         if(req.method==='DELETE'&&['items','lists','snapshots','templates'].includes(kind))return json(res,200,workbench[{items:'removeItem',lists:'deleteList',snapshots:'deleteSnapshot',templates:'deleteTemplate'}[kind]](id))
       }
-      if (req.method === 'GET' && route === '/api/data') return json(res, 200, { metadata: { name: data.metadata.name, year: data.metadata.year, scope: data.metadata.scope, colleges: data.metadata.colleges, profile_colleges: data.metadata.profile_colleges, counts: data.metadata.counts }, sources: data.sources.map(publicSource) })
+      if (req.method === 'GET' && route === '/api/data') return json(res, 200, { metadata: { name: currentData.metadata.name, year: currentData.metadata.year, scope: currentData.metadata.scope, colleges: currentData.metadata.colleges, profile_colleges: currentData.metadata.profile_colleges, counts: currentData.metadata.counts }, sources: currentData.sources.map(publicSource) })
       const sourceMatch=route.match(/^\/api\/sources\/(S\d+)$/)
       if(req.method==='GET'&&sourceMatch){
-        const source=data.sources.find(source=>source.id===sourceMatch[1])
+        const source=currentData.sources.find(source=>source.id===sourceMatch[1])
         if(!source)return json(res,404,{error:'这条资料暂未收录'})
-        const content=publicSourceContent(data,source)
+        const content=publicSourceContent(currentData,source)
         if(source.kind==='第三方评价'&&Array.isArray(content.entries)&&content.entries.length>20){
           return json(res,200,{...content,entries:content.entries.slice(0,20),truncated:true,total_entries:content.entries.length,protection_notice:'为防止评价库被整包抓取搬迁，接口仅预览前 20 条摘要；请通过北极星 Agent API 按具体导师或条件检索。'})
         }
         return json(res,200,content)
       }
       if (req.method === 'GET' && route === '/api/config') return json(res, 200, config.publicConfig())
+      if (req.method === 'POST' && route === '/api/config/test') {
+        const input = await readBody(req)
+        const candidate = config.candidate(input)
+        const result = await testConnection(candidate)
+        return json(res, 200, result)
+      }
       if (req.method === 'PUT' && route === '/api/config/execution') return json(res, 200, config.updateExecution(await readBody(req)))
       if ((req.method === 'GET' || req.method === 'POST') && route === '/api/models') {
         const candidate = req.method === 'POST' ? config.candidate(await readBody(req)) : config.effective()
@@ -231,7 +382,7 @@ export function createApplication({ data = loadData(), store = createStore(), co
         if (['query', 'search', 'join'].includes(toolName) && Number.isInteger(args?.limit) && args.limit > 100) {
           return json(res, 403, { error: '为防止加密评价数据被批量导出搬迁，单次 HTTP Agent API 查询上限为 100 条；请通过筛选条件缩小范围或使用 aggregate 统计。', code: 'BULK_EXPORT_BLOCKED' })
         }
-        const rawResult = toolName === 'workspace' ? workbench.execute(args, apiTools) : toolName === 'profile' ? profiles.execute(args) : apiTools.execute(toolName, args)
+        const rawResult = toolName === 'workspace' ? workbench.execute(args, apiTools) : toolName === 'profile' ? profiles.execute(args) : toolName === 'export_file' ? await exportService.executeTool(args, apiTools) : apiTools.execute(toolName, args)
         if (rawResult && Array.isArray(rawResult.rows)) {
           const stripInternal = row => row && typeof row === 'object' ? Object.fromEntries(Object.entries(row).filter(([k]) => !/^(?:mentor_id|review_id|student_id|exam_id|profile_id|candidate_id|source_locator|original_sha256|sha256)$/.test(k))) : row
           return json(res, 200, {
@@ -299,29 +450,47 @@ export function createApplication({ data = loadData(), store = createStore(), co
       else res.end()
     }
   }
-  return { handler, store, config, data, dataRevision, cancelAll: () => {
-    shuttingDown = true
-    for (const run of active.values()) run.controller.abort('shutdown')
-    return Promise.allSettled([...active.values()].map(run => run.promise))
-  } }
+  return {
+    handler,
+    store,
+    config,
+    get data() { return currentData },
+    get dataRevision() { return dataRevision },
+    cancelAll: () => {
+      shuttingDown = true
+      for (const run of active.values()) run.controller.abort('shutdown')
+      return Promise.allSettled([...active.values()].map(run => run.promise))
+    },
+  }
 }
 
-export async function startServer({ dev = false, port = Number(process.env.PORT || 3210), dataDir } = {}) {
+export async function startServer({ dev = false, port = Number(process.env.PORT || 3210), dataDir, staticDirectory = dist, vaultDir, registerSignals = true } = {}) {
   let vite
   if (dev) {
     const { createServer } = await import('vite')
     vite = await createServer({ server: { middlewareMode: true }, appType: 'spa' })
   }
-  const store = createStore(dataDir), app = createApplication({ store, frontend: vite?.middlewares })
+  const store = createStore(dataDir), app = createApplication({ store, frontend: vite?.middlewares, staticDirectory, vaultDir })
   const server = http.createServer(app.handler)
   server.requestTimeout = 0
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve) })
   const address = `http://127.0.0.1:${server.address().port}`
   console.log(`${APP_NAME} 已启动：${address}${dev ? '（开发模式）' : ''}`)
   console.log('在浏览器中访问该地址即可。按 Ctrl+C 停止；不会自动打开窗口。')
-  async function close() { await app.cancelAll(); await vite?.close(); await new Promise(resolve => server.close(resolve)) }
-  process.once('SIGINT', () => close().then(() => process.exit(0)))
-  process.once('SIGTERM', () => close().then(() => process.exit(0)))
+  let closingPromise = null
+  async function close() {
+    if (closingPromise) return closingPromise
+    closingPromise = (async () => {
+      await app.cancelAll()
+      await vite?.close()
+      if (server.listening) await new Promise(resolve => server.close(resolve))
+    })()
+    return closingPromise
+  }
+  if (registerSignals) {
+    process.once('SIGINT', () => close().then(() => process.exit(0)))
+    process.once('SIGTERM', () => close().then(() => process.exit(0)))
+  }
   return { server, app, address, close }
 }
 

@@ -11,6 +11,7 @@ import {createActivity,toolActivity} from './activity.js'
 import {answerPolicy,narrativeRequested} from '../lib/answer-policy.js'
 import {createAnswerStream,deliveryMessages} from './delivery.js'
 import {workbenchToolDefinition,profileToolDefinition} from './workbench-tool.js'
+import {exportToolDefinition} from './export.js'
 import {profilePrompt} from '../lib/profile.js'
 import {mentorNotesForRows} from '../lib/data.js'
 import {nameVariants} from '../lib/insights.js'
@@ -160,7 +161,7 @@ function finalizeBestEffortArtifacts(assistant, question) {
   }
 }
 
-export async function runAgent({chat,text,replacesMessageId,data,dataRevision,config,store,workbench,profiles,emit,signal}) {
+export async function runAgent({chat,text,replacesMessageId,data,dataRevision,config,store,workbench,profiles,exportService,emit,signal}) {
   const previewBudget=Math.max(36000,Math.min(96000,Math.floor((config.contextWindow||65536)*0.25)))
   const refreshed=refreshDataContext(chat,dataRevision)
   if(text){
@@ -311,10 +312,12 @@ export async function runAgent({chat,text,replacesMessageId,data,dataRevision,co
       }
       const system=(composing?selectionPrompt+`\n目录：${JSON.stringify(directory)}`:systemPrompt(data,directory))+(requirement?`\n${requirement.default?'本轮先给少量高匹配候选':'本题人数要求'}：${requirement.perGroup?'每类':'合计'}${requirement.maximum?'最多':''}${requirement.count}位${requirement.groups?`，分${requirement.groups}类`:''}。${sizes?`未指定各类人数时按${sizes.join('、')}位分配，各类名单不重复；以真实数据生成名单后再说明。`:''}`:'' )+(refreshed&&rounds===0?'\n会话执行版本已更新，请按当前资料重新查询，历史答复只用于理解指代。':'')+(composing?`\n${prepared.ok?'名单已就绪，直接给简短结论与来源，不再查询或修改。':`当前要完成：${prepared.issues.join('；')}`}当前图表：${JSON.stringify(assistant.artifacts.map(table=>({id:table.id,title:table.title,rows:table.rows.length,names:table.rows.map(row=>row.name||row.mentor_name)})))}。`:finish?'\n已有资料已保留，请现在直接整理最终结论与现有图表，结束重复探索。':'')
       const persona=profiles?profilePrompt(profiles.read()):''
-      const contextualSystem=system+(persona?`\n${persona}`:'')+`\n本段对话的最近用户要求（按时间排列，最新明确变更优先，其余仍沿用）：${JSON.stringify(requests)}`
       const workspaceIntent=/收藏|候选库|工作台|清单|方案|模板|备注|个人记录|记下|导出|报告|撤销|移出|联系进度/.test(requests.join(' '))
+      const exportIntent=Boolean(exportService)&&/导出|excel|xlsx|pdf|word|docx|文档|表格|报表|下载|保存为|生成文件|清单|对比报告|5星|五星/i.test(requests.join(' '))
       const profileIntent=profiles&&/记住|画像|以后(?:都|默认)|默认(?:按|用)|我的(?:情况|条件|偏好)|我是(?:统考|保研|直博)|改成|更新(?:一下)?我的/.test(chat.latestUserText||'')
-      const definitions=[...agentToolDefinitions,...(workbench&&workspaceIntent?[workbenchToolDefinition]:[]),...(profileIntent?[profileToolDefinition]:[])]
+      const exportNote=exportService&&(exportIntent||workspaceIntent)?'\n若用户要求导出 Excel(.xlsx)、PDF(.pdf)、Word(.docx) 或 Markdown(.md)，直接调用 export_file 生成下载卡片；不支持 PPT/PPTX。':''
+      const contextualSystem=system+(persona?`\n${persona}`:'')+exportNote+`\n本段对话的最近用户要求（按时间排列，最新明确变更优先，其余仍沿用）：${JSON.stringify(requests)}`
+      const definitions=[...agentToolDefinitions,...(workbench&&workspaceIntent?[workbenchToolDefinition]:[]),...(exportService&&(exportIntent||workspaceIntent)?[exportToolDefinition]:[]),...(profileIntent?[profileToolDefinition]:[])]
       const compacted=await compactContext({chat,system:contextualSystem,tools:definitions,config,request,force:forceCompaction})
       if(forceCompaction&&!compacted)throw new Error('当前模型无法容纳必要资料，请在设置中选择更大容量的模型')
       forceCompaction=false
@@ -389,10 +392,26 @@ export async function runAgent({chat,text,replacesMessageId,data,dataRevision,co
           tool.args=JSON.parse(call.function.arguments);tool.label=toolActivity(tool.name,tool.args);activity.update(tool.label)
           if(tool.name==='visualize'&&Array.isArray(tool.args.row_notes))throw new Error('内置Agent的说明必须按唯一字段绑定，请用row_notes:{by:"name",entries:[{value:"导师姓名",text:"说明"}]}，不要按行位置传字符串数组。')
           const key=tool.name+JSON.stringify(canonical(tool.args))
-          entry=['workspace','profile'].includes(tool.name)?null:cache.get(key);reused=Boolean(entry)
+          const nonCached = ['workspace', 'profile', 'export_file'].includes(tool.name)
+          entry=nonCached?null:cache.get(key);reused=Boolean(entry)
           if(reused)activity.update('使用已查资料')
-          if(!entry){entry={result:tool.name==='workspace'&&workbench?workbench.execute(tool.args,runtime):tool.name==='profile'&&profiles?profiles.execute(tool.args):runtime.execute(tool.name,tool.args)};if(!['workspace','profile'].includes(tool.name))cache.set(key,entry)}
-          result=entry.result;if(tool.name==='profile')emit('profile',result.profile);if(tool.name==='workspace'){emit('workspace',{changed:true});if(result.file){assistant.files||=[];assistant.files.push(result.file);emit('file',result.file)}}replayed=reused&&Boolean(result.ref)&&!chat.modelMessages.includes(entry.message)
+          if(!entry){
+            let execResult
+            if(tool.name==='export_file'&&exportService){
+              execResult=await exportService.executeTool(tool.args,runtime)
+            }else if(tool.name==='workspace'&&tool.args?.action==='report'&&['xlsx','pdf','docx'].includes(String(tool.args?.format||'').toLowerCase())&&exportService){
+              execResult=await exportService.executeTool({format:tool.args.format,kind:tool.args.scope==='library'?'preset':'comparison',preset:tool.args.scope==='library'?'library':undefined,scope:tool.args.scope,from:tool.args.from,mentors:tool.args.mentors,name:tool.args.name,include_notes:tool.args.include_notes},runtime)
+            }else if(tool.name==='workspace'&&workbench){
+              execResult=workbench.execute(tool.args,runtime)
+            }else if(tool.name==='profile'&&profiles){
+              execResult=profiles.execute(tool.args)
+            }else{
+              execResult=runtime.execute(tool.name,tool.args)
+            }
+            entry={result:execResult}
+            if(!nonCached)cache.set(key,entry)
+          }
+          result=entry.result;if(tool.name==='profile')emit('profile',result.profile);if(tool.name==='workspace')emit('workspace',{changed:true});if(result.file){assistant.files||=[];assistant.files.push(result.file);emit('file',result.file)};replayed=reused&&Boolean(result.ref)&&!chat.modelMessages.includes(entry.message)
           if(!reused||replayed)useful=true
           tool.status='complete';tool.summary=result.message|| (result.artifact?`${result.artifact.rows.length} 条 · ${result.artifact.title}`:result.returned!=null?`${result.returned} / ${result.total} 条`:'资料范围已读取')
           tool.reused=reused;tool.result={ref:result.ref,total:result.total,returned:result.returned,columns:result.columns,rows:result.rows?.slice?.(0,6),notes:result.notes}

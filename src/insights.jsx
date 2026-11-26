@@ -18,7 +18,7 @@ export function PolarisProvider({children}){
 
   const reload=useCallback(()=>{
     setLoading(true);setError('')
-    Promise.all([
+    return Promise.all([
       api('/insights').then(result=>setInsights(result.mentors)),
       api('/profile').then(result=>{setProfile(result.profile);setOptions(result.options)}).catch(()=>{}),
     ]).catch(e=>setError(e.message||'导师资料暂未加载')).finally(()=>setLoading(false))

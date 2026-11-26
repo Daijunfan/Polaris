@@ -4,6 +4,7 @@ import {resultTitle} from '../presentation.js'
 import {useWorkspace} from '../workspace.jsx'
 import {Bookmark} from 'lucide-react'
 import {ShareCardButton} from './Polaris.jsx'
+import ExportMenu from './ExportMenu.jsx'
 
 export default function Rankings({artifacts,onSources}){
   const workspace=useWorkspace(),[college,setCollege]=useState('')
@@ -21,7 +22,7 @@ export default function Rankings({artifacts,onSources}){
     {artifacts.length>1&&<div className="recommendations-heading"><h3>推荐名单</h3><span>{count} 位导师 · {artifacts.length} 组结果</span></div>}
     <div className="recommendations-bar">
       {artifacts.length>1&&<div className="recommendation-tabs" role="tablist" aria-label="推荐类别">{artifacts.map((artifact,index)=><button key={artifact.id} id={`${id}-tab-${index}`} ref={node=>tabs.current[index]=node} role="tab" aria-label={`${resultTitle(artifact)}，${artifact.rows.length}位`} aria-selected={active===index} aria-controls={`${id}-panel-${index}`} tabIndex={active===index?0:-1} title={artifact.title} onClick={()=>setSelected(index)} onKeyDown={event=>navigate(event,index)}><span>{resultTitle(artifact)}</span><small>{artifact.rows.length}</small></button>)}</div>}
-      <div className="recommendation-controls">{colleges.length>1&&<select aria-label="筛选推荐学院" value={college} onChange={event=>setCollege(event.target.value)}><option value="">全部学院</option>{colleges.map(value=><option key={value}>{value}</option>)}</select>}{workspace?.state&&<button disabled={workspace.pending||!views[active]?.rows.length} onClick={()=>workspace.mutate('/workbench/items','POST',{mentors:views[active].rows.map(row=>({name:row.name||row.mentor_name,college:row.college}))}).then(()=>workspace.setMessage('已收藏本组导师')).catch(()=>{})}><Bookmark size={13}/>收藏本组</button>}{views[active]?.rows.length>0&&<ShareCardButton artifact={views[active]}/>}</div>
+      <div className="recommendation-controls">{colleges.length>1&&<select aria-label="筛选推荐学院" value={college} onChange={event=>setCollege(event.target.value)}><option value="">全部学院</option>{colleges.map(value=><option key={value}>{value}</option>)}</select>}{workspace?.state&&<button disabled={workspace.pending||!views[active]?.rows.length} onClick={()=>workspace.mutate('/workbench/items','POST',{mentors:views[active].rows.map(row=>({name:row.name||row.mentor_name,college:row.college}))}).then(()=>workspace.setMessage('已收藏本组导师')).catch(()=>{})}><Bookmark size={13}/>收藏本组</button>}<ExportMenu variant="compact" label="导出名单" ariaLabel="多格式导出推荐名单" disabled={!views[active]?.rows?.length} getPayload={format=>({kind:'artifact',format,artifacts:[views[active]],title:views[active]?.title})} onSuccess={({filename})=>workspace?.setMessage?.(`已导出 ${filename}`)} onError={err=>workspace?.fail?.(err)} />{views[active]?.rows.length>0&&<ShareCardButton artifact={views[active]}/>}</div>
     </div>
     {artifacts.map((artifact,index)=><div key={artifact.id} id={`${id}-panel-${index}`} role={artifacts.length>1?'tabpanel':undefined} aria-labelledby={artifacts.length>1?`${id}-tab-${index}`:undefined} hidden={active!==index}>{views[index].rows.length?<Artifact artifact={views[index]} onSources={onSources}/>:<div className="table-empty">本分类没有该学院的候选。<button onClick={()=>setCollege('')}>查看全部学院</button></div>}</div>)}
   </section>

@@ -1,11 +1,13 @@
-import React,{useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react'
+import React,{useDeferredValue,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react'
 import {Bookmark,Check,ChevronDown,CornerDownLeft,GraduationCap,MessageCircleQuestion,RotateCcw,Search,Sparkles,X} from 'lucide-react'
 import Dialog from './Dialog.jsx'
 import {Avatar,FlagChips,MatchRing,Stars} from './MentorInsight.jsx'
+import ExportMenu from './ExportMenu.jsx'
 import {usePolaris} from '../insights.jsx'
 import {useWorkspace} from '../workspace.jsx'
 import {nameVariants} from '../../lib/insights.js'
 import {MENTOR_FILTER_GROUPS,MENTOR_FILTER_MAP,computeFacetCounts,filterMentors,shortCollegeName,splitMentorColleges} from '../../lib/mentor-filters.js'
+import {formatDisciplineText} from '../presentation.js'
 
 const PRIORITY_COLLEGES=['网络空间安全学院','计算机学院','人工智能学院','软件学院']
 const HOT_FILTER_IDS=['internship_ok','no_clock','no_paper','doctoral','dir_llm','dir_6g']
@@ -14,6 +16,7 @@ export default function QuickSearch({onClose,onSuspend,onReopen,savedStateRef,on
   const polaris=usePolaris(),w=useWorkspace()
   const init=savedStateRef?.current||{}
   const [query,setQuery]=useState(init.query||'')
+  const deferredQuery=useDeferredValue(query)
   const [selectedColleges,setSelectedColleges]=useState(init.selectedColleges||[])
   const [selectedFilters,setSelectedFilters]=useState(init.selectedFilters||[])
   const [directionMode,setDirectionMode]=useState(init.directionMode||'and')
@@ -50,8 +53,8 @@ export default function QuickSearch({onClose,onSuspend,onReopen,savedStateRef,on
   const clearAllFilters=()=>{setSelectedFilters([]);setSelectedColleges([]);setDirectionMode('and')}
 
   const {filterCounts,collegeCounts}=useMemo(
-    ()=>computeFacetCounts(allMentors,{query,colleges:selectedColleges,filters:selectedFilters,directionMode,collegeList:colleges}),
-    [allMentors,query,selectedColleges,selectedFilters,directionMode,colleges]
+    ()=>computeFacetCounts(allMentors,{query:deferredQuery,colleges:selectedColleges,filters:selectedFilters,directionMode,collegeList:colleges}),
+    [allMentors,deferredQuery,selectedColleges,selectedFilters,directionMode,colleges]
   )
 
   const groupSelectedCounts=useMemo(()=>{
@@ -67,14 +70,16 @@ export default function QuickSearch({onClose,onSuspend,onReopen,savedStateRef,on
 
   const orFallbackCount=useMemo(()=>{
     if(selectedDirectionCount<2||directionMode!=='and')return 0
-    return filterMentors(allMentors,{query,colleges:selectedColleges,filters:selectedFilters,directionMode:'or'}).length
-  },[allMentors,query,selectedColleges,selectedFilters,directionMode,selectedDirectionCount])
+    return filterMentors(allMentors,{query:deferredQuery,colleges:selectedColleges,filters:selectedFilters,directionMode:'or'}).length
+  },[allMentors,deferredQuery,selectedColleges,selectedFilters,directionMode,selectedDirectionCount])
 
-  const {results,sortedResults,totalMatches}=useMemo(()=>{
-    const q=query.trim().toLowerCase()
-    const variants=q?nameVariants(query.trim()).map(v=>v.toLowerCase()):[]
-    const savedKeys=new Set((w?.state?.items||[]).map(item=>item.key))
-    const filtered=filterMentors(allMentors,{query,colleges:selectedColleges,filters:selectedFilters,directionMode})
+  const savedKeySig=useMemo(()=>(w?.state?.items||[]).map(item=>item.key).sort().join('\0'),[w?.state?.items])
+  const savedKeys=useMemo(()=>new Set(savedKeySig?savedKeySig.split('\0'):[]),[savedKeySig])
+
+  const {sortedResults,totalMatches}=useMemo(()=>{
+    const q=deferredQuery.trim().toLowerCase()
+    const variants=q?nameVariants(deferredQuery.trim()).map(v=>v.toLowerCase()):[]
+    const filtered=filterMentors(allMentors,{query:deferredQuery,colleges:selectedColleges,filters:selectedFilters,directionMode})
     const sorted=filtered.toSorted((a,b)=>{
       if(q){
         const aExact=a.name.toLowerCase()===q||variants.includes(a.name.toLowerCase())?2:a.name.toLowerCase().startsWith(q)?1:0
@@ -88,13 +93,15 @@ export default function QuickSearch({onClose,onSuspend,onReopen,savedStateRef,on
       if(ma!==mb&&!q)return mb-ma
       return (b.rating??-1)-(a.rating??-1)||(b.doctoral?1:0)-(a.doctoral?1:0)||a.name.localeCompare(b.name,'zh-CN')
     })
-    return {results:sorted.slice(0,limitCount),sortedResults:sorted,totalMatches:filtered.length}
-  },[allMentors,selectedColleges,selectedFilters,directionMode,query,polaris,w?.state?.items,limitCount])
+    return {sortedResults:sorted,totalMatches:filtered.length}
+  },[allMentors,selectedColleges,selectedFilters,directionMode,deferredQuery,polaris.match,savedKeys])
+
+  const results=useMemo(()=>sortedResults.slice(0,limitCount),[sortedResults,limitCount])
 
   useEffect(()=>{
     if(!mountedRef.current){mountedRef.current=true;return}
     setActiveIndex(0);setLimitCount(20)
-  },[query,selectedColleges,selectedFilters,directionMode])
+  },[deferredQuery,selectedColleges,selectedFilters,directionMode])
   const safeIndex=Math.min(activeIndex,Math.max(0,results.length-1))
 
   const activeFilterItems=useMemo(()=>[
@@ -157,6 +164,22 @@ export default function QuickSearch({onClose,onSuspend,onReopen,savedStateRef,on
   const savedCount=w?.state?.items?.length||0
   const headerActions=<div className="qs-header-tools">
     <span className="quick-search-meta">{hasAnyCriteria?`显示 ${results.length} / 共 ${totalMatches} 位匹配`:`全校 ${allMentors.length} 位导师`}</span>
+    <ExportMenu
+      variant="compact"
+      label="导出结果"
+      ariaLabel="导出当前筛选导师"
+      showPresets={true}
+      disabled={!sortedResults.length}
+      getPayload={format => ({
+        kind: 'mentors',
+        format,
+        keys: sortedResults.map(m => m.key),
+        title: hasAnyCriteria ? '符合条件的导师名单' : '全校导师汇总名单',
+        filtersApplied: [...activeFilterItems.map(i => i.label), ...(query.trim() ? [`关键词：${query.trim()}`] : [])],
+      })}
+      onSuccess={({ filename }) => w?.setMessage?.(`已导出 ${filename}`)}
+      onError={err => w?.fail?.(err)}
+    />
     {onOpenLibrary&&<button type="button" className="qs-lib-btn" onClick={()=>{onClose();onOpenLibrary()}}>
       <Bookmark size={12} aria-hidden="true"/>候选库{savedCount?` (${savedCount})`:''}
     </button>}
@@ -256,7 +279,7 @@ export default function QuickSearch({onClose,onSuspend,onReopen,savedStateRef,on
     </div>:<ul className="quick-search-list" ref={listRef} aria-label="导师速查结果">
       {results.map((item,idx)=>{
         const match=polaris.match(item)
-        const saved=w?.state?.items?.some(s=>s.key===item.key)
+        const saved=savedKeys.has(item.key)
         const bad=item.flags?.some(f=>f.tone==='bad')
         return <li key={item.key} data-qs-item className={'qs-item'+(idx===safeIndex?' active':'')} onPointerEnter={()=>setActiveIndex(idx)}>
           <button type="button" className="qs-item-main" aria-current={idx===safeIndex?'true':undefined} onClick={()=>openDossier(item,idx)}>
@@ -270,7 +293,7 @@ export default function QuickSearch({onClose,onSuspend,onReopen,savedStateRef,on
                 <Stars value={item.rating}/>
               </div>
               <FlagChips insight={item} tones={['bad','good']}/>
-              {item.directions&&<p className="qs-directions" title={String(item.directions)}>{String(item.directions).replace(/\n/g,' ')}</p>}
+              {item.directions&&<p className="qs-directions" title={formatDisciplineText(String(item.directions))}>{formatDisciplineText(String(item.directions)).replace(/\n/g,' ')}</p>}
             </div>
             {match&&<MatchRing match={match} size={36}/>}
           </button>
@@ -283,5 +306,6 @@ export default function QuickSearch({onClose,onSuspend,onReopen,savedStateRef,on
       })}
       {totalMatches>results.length&&<li className="qs-more-row"><button type="button" className="secondary-button qs-more-btn" onClick={()=>setLimitCount(c=>c+32)}>显示更多匹配导师（余 {totalMatches-results.length} 位）</button></li>}
     </ul>}
+    <footer className="qs-kbd-legend" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> 选择</span><span><kbd>Enter</kbd> 打开档案</span><span><kbd>Shift</kbd>+<kbd>Enter</kbd> 向北极星提问</span><span><kbd>Esc</kbd> 关闭</span></footer>
   </Dialog>
 }

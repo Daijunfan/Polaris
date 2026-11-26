@@ -16,7 +16,7 @@ export function AnalysisViews({rules,setRules,onApply,onClear,onSave}){
       <button aria-label={'删除条件 '+(index+1)} onClick={()=>setRules(rules.filter((_,i)=>i!==index))}><X size={14}/></button>
     </div>})}
     <datalist id="workbench-college-options">{(w.state.colleges||[]).map(c=><option key={c} value={c}/>)}</datalist>
-    <div className="analysis-rule-actions"><button className="secondary-button" onClick={()=>{if(w.requireFeature('linked'))setRules([...rules,{field:'rating',op:'gte',value:4}])}}><Plus size={13}/>添加条件</button><button className="primary-button" disabled={w.pending||!rules.length} onClick={()=>onApply(rules)}>应用联动</button><button className="secondary-button" onClick={onClear}>清除条件</button><button className="text-button" disabled={!rules.length} onClick={()=>{if(w.requireFeature('views'))onSave()}}>保存为动态视图</button></div>
+    <div className="analysis-rule-actions"><button className="secondary-button" onClick={()=>setRules([...rules,{field:'rating',op:'gte',value:4}])}><Plus size={13}/>添加条件</button><button className="primary-button" disabled={w.pending||!rules.length} onClick={()=>onApply(rules)}>应用联动</button><button className="secondary-button" onClick={onClear}>清除条件</button><button className="text-button" disabled={!rules.length} onClick={onSave}>保存为动态视图</button></div>
     {w.state.views.length>0&&<div className="saved-analysis-views">{w.state.views.map(view=><span key={view.id}><button onClick={()=>api('/workbench/views/'+view.id).then(result=>onApply(result.filters,result)).catch(w.fail)}>{view.name}</button><button aria-label={'删除视图 '+view.name} onClick={()=>w.mutate('/workbench/views/'+view.id,'DELETE').catch(()=>{})}><X size={11}/></button></span>)}</div>}
   </div></details>
 }

@@ -2,13 +2,16 @@
 import hashlib
 import json
 import re
+import subprocess
+import sys
 from collections import defaultdict
 from pathlib import Path
 
 import pymupdf
 
 ROOT = Path(__file__).resolve().parent.parent
-TARGET = ROOT / 'data/pdf-reviews.json'
+PLAINTEXT_DIR = ROOT / '.local' / 'plaintext-data'
+TARGET = PLAINTEXT_DIR / 'pdf-reviews.json'
 DOCUMENTS = [
     ('计算机导师.pdf', '计算机学院', '计算机', 2),
     ('软件工程导师.pdf', '软件学院', '软件', 1),
@@ -263,11 +266,34 @@ def import_document(filename, college, prefix, table_pages, source_id):
                 pages=[dict(page=i+1, text=text) for i, text in enumerate(pages)])
 
 
+def load_dataset(name, default=None):
+    plaintext = PLAINTEXT_DIR / f'{name}.json'
+    if plaintext.exists():
+        return json.loads(plaintext.read_text(encoding='utf-8'))
+    vault = ROOT / 'data' / f'{name}.vault'
+    if vault.exists():
+        raw = subprocess.check_output(
+            [
+                'node',
+                '--input-type=module',
+                '-e',
+                "import { readSealedDataset } from './lib/data.js'; process.stdout.write(JSON.stringify(readSealedDataset(process.argv[1]) ?? null));",
+                name,
+            ],
+            cwd=str(ROOT),
+            encoding='utf-8',
+        )
+        parsed = json.loads(raw)
+        if parsed is not None:
+            return parsed
+    return {} if default is None else default
+
+
 def main():
-    old = json.loads(TARGET.read_text()) if TARGET.exists() else {'sources': []}
+    old = load_dataset('pdf-reviews', {'sources': []})
     used = []
-    for filename in ['dataset.json', 'web-profiles.json', 'mentor-notes.json']:
-        used.extend(json.loads((ROOT/'data'/filename).read_text()).get('sources', []))
+    for name in ['dataset', 'web-profiles', 'mentor-notes']:
+        used.extend(load_dataset(name, {}).get('sources', []))
     next_source = max(int(source['id'][1:]) for source in used + old['sources']) + 1
     previous = {source.get('original_file', source['file']): source['id'] for source in old['sources']}
     result = dict(version=1, sources=[], mentors=[], reviews=[], documents=[])
@@ -281,7 +307,12 @@ def main():
         result['documents'].append(dict(source_id=source_id, pages=imported['pages']))
     target = ROOT / '.local/pdf-import/pending.json' if old.get('review_revision') else TARGET
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
+    target.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    if target == TARGET and '--no-seal' not in sys.argv:
+        cmd = ['node', 'scripts/seal-data.mjs', '--only', 'pdf-reviews']
+        if '--custom' in sys.argv:
+            cmd.append('--custom')
+        subprocess.run(cmd, cwd=str(ROOT), check=True)
     print(f'Imported material: {target}')
     print(json.dumps({college:dict(mentors=sum(m['college']==college for m in result['mentors']),
                                   rated=sum(m['college']==college and m['rating'] is not None for m in result['mentors']),
