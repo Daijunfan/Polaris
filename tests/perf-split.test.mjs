@@ -6,9 +6,17 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
-test('App 懒加载 Message 渲染器与 Markdown 栈且不存在静态导入', () => {
+test('App 懒加载 Message 渲染器与弹窗栈且不存在静态导入', () => {
   const src = fs.readFileSync(path.join(root, 'src/App.jsx'), 'utf8')
   assert.match(src, /lazy\s*\(/)
-  assert.match(src, /import\(['"]\.\/components\/Message\.jsx['"]\)/)
-  assert.doesNotMatch(src, /import\s+Message\s+from\s+['"]\.\/components\/Message\.jsx['"]/)
+  for (const mod of [
+    './components/Message.jsx',
+    './components/Dialogs.jsx',
+    './components/QuickSearch.jsx',
+    './components/MentorInsight.jsx',
+  ]) {
+    assert.ok(src.includes(`import('${mod}')`) || src.includes(`import("${mod}")`), `缺少懒加载导入: ${mod}`)
+    const escaped = mod.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    assert.doesNotMatch(src, new RegExp(`from\\s+['"]${escaped}['"]`), `不应静态导入: ${mod}`)
+  }
 })

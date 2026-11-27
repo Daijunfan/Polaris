@@ -1,10 +1,9 @@
 import {APP_NAME} from '../lib/brand.js'
 import React, { lazy,Suspense,useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Bookmark, ChevronDown, Database, FileText, LoaderCircle, Lock, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, Search, SlidersHorizontal } from 'lucide-react'
-import QuickSearch from './components/QuickSearch.jsx'
 import { api, downloadFile, modelLabel, observeChat, streamChat } from './api.js'
-import { RenameConversation, Settings, ShortcutHelp, Sources, Trash, Usage, VaultUnlockDialog } from './components/Dialogs.jsx'
 import { Sidebar, Welcome, Composer } from './components/WorkspaceViews.jsx'
+import { MessageListSkeleton } from './components/Skeleton.jsx'
 import ExportMenu from './components/ExportMenu.jsx'
 import { effortLabel, messageMarkdown, sourcesMarkdown } from './presentation.js'
 import './styles.css'
@@ -14,14 +13,42 @@ import './components/sidebar.css'
 import './components/workbench.css'
 import './components/export.css'
 import {usePolaris} from './insights.jsx'
-import {MentorDossier} from './components/MentorInsight.jsx'
 import './components/polaris.css'
 import './components/mobile.css'
 import './components/theme-dark.css'
 import {useWorkspace} from './workspace.jsx'
 import {useToast} from './toast.jsx'
-const loadMessage=()=>import('./components/Message.jsx')
-const Message=lazy(loadMessage)
+
+function cachedChunk(loader){
+  let mod=null,promise=null
+  const load=()=>(promise??=loader().then(m=>(mod=m)))
+  const pick=(name='default')=>{
+    const Lazy=lazy(()=>load().then(m=>({default:m[name]})))
+    return function SplitComponent(props){
+      if(mod){const Comp=mod[name];return <Comp {...props}/>}
+      return <Lazy {...props}/>
+    }
+  }
+  return {load,pick}
+}
+const messageChunk=cachedChunk(()=>import('./components/Message.jsx'))
+const dialogsChunk=cachedChunk(()=>import('./components/Dialogs.jsx'))
+const quickSearchChunk=cachedChunk(()=>import('./components/QuickSearch.jsx'))
+const insightChunk=cachedChunk(()=>import('./components/MentorInsight.jsx'))
+const loadMessage=messageChunk.load
+const loadDialogs=dialogsChunk.load
+const loadQuickSearch=quickSearchChunk.load
+const loadInsight=insightChunk.load
+const Message=messageChunk.pick('default')
+const QuickSearch=quickSearchChunk.pick('default')
+const MentorDossier=insightChunk.pick('MentorDossier')
+const Settings=dialogsChunk.pick('Settings')
+const ShortcutHelp=dialogsChunk.pick('ShortcutHelp')
+const Sources=dialogsChunk.pick('Sources')
+const Trash=dialogsChunk.pick('Trash')
+const Usage=dialogsChunk.pick('Usage')
+const RenameConversation=dialogsChunk.pick('RenameConversation')
+const VaultUnlockDialog=dialogsChunk.pick('VaultUnlockDialog')
 const WorkspaceLayer=lazy(()=>import('./components/Workbench.jsx'))
 
 export default function App() {
@@ -42,8 +69,8 @@ export default function App() {
   const closeModal = useCallback(() => setModal(null), [])
   const closeQuickSearch = useCallback(() => { quickSearchState.current = null; setModal(null) }, [])
   const closeSidebar=useCallback(()=>{setSidebar(false);mobileToggle.current?.focus({preventScroll:true})},[])
-  const showSettings=useCallback(()=>{closeSidebar();setModal('settings')},[closeSidebar]),showTrash=useCallback(()=>{closeSidebar();setModal('trash')},[closeSidebar]),showUsage=useCallback(()=>{closeSidebar();setModal('usage')},[closeSidebar]),showShortcuts=useCallback(()=>{closeSidebar();setModal('shortcuts')},[closeSidebar])
-  const showRename=useCallback(item=>{setRenameTarget(item);setModal('rename')},[])
+  const showSettings=useCallback(()=>{loadDialogs().catch(()=>{});closeSidebar();setModal('settings')},[closeSidebar]),showTrash=useCallback(()=>{loadDialogs().catch(()=>{});closeSidebar();setModal('trash')},[closeSidebar]),showUsage=useCallback(()=>{loadDialogs().catch(()=>{});closeSidebar();setModal('usage')},[closeSidebar]),showShortcuts=useCallback(()=>{loadDialogs().catch(()=>{});closeSidebar();setModal('shortcuts')},[closeSidebar])
+  const showRename=useCallback(item=>{loadDialogs().catch(()=>{});setRenameTarget(item);setModal('rename')},[])
   const collapseSidebar=useCallback(()=>{setSidebarCollapsed(true);sidebarToggle.current?.focus({preventScroll:true})},[])
   useEffect(()=>{try{localStorage.setItem('mentor-sidebar-collapsed',String(sidebarCollapsed))}catch{}},[sidebarCollapsed])
   function editText(value) {
@@ -56,11 +83,17 @@ export default function App() {
   useEffect(() => { initialize(); return () => {observer.current?.abort();streamAbortRef.current?.abort();cancelAnimationFrame(deltaFrame.current)} }, [])
   useEffect(() => {
     if (typeof window === 'undefined') return
+    const prefetch = () => {
+      loadMessage().catch(() => {})
+      loadDialogs().catch(() => {})
+      loadQuickSearch().catch(() => {})
+      loadInsight().catch(() => {})
+    }
     if (typeof window.requestIdleCallback === 'function') {
-      const id = window.requestIdleCallback(() => { loadMessage().catch(() => {}) })
+      const id = window.requestIdleCallback(prefetch)
       return () => window.cancelIdleCallback(id)
     }
-    const timer = setTimeout(() => { loadMessage().catch(() => {}) }, 1200)
+    const timer = setTimeout(prefetch, 1200)
     return () => clearTimeout(timer)
   }, [])
   useEffect(() => {
@@ -188,6 +221,7 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         if (e.repeat) return
         e.preventDefault()
+        loadQuickSearch().catch(() => {})
         setSidebar(false)
         polaris.dismissMentorAll()
         setModal(current => current && current !== 'quick-search' ? current : current === 'quick-search' ? (quickSearchState.current = null, null) : 'quick-search')
@@ -195,12 +229,14 @@ export default function App() {
         if (e.repeat) return
         if (openDialog && modalRef.current !== 'shortcuts') return
         e.preventDefault()
+        loadDialogs().catch(() => {})
         setSidebar(false)
         setModal(current => current === 'shortcuts' ? null : 'shortcuts')
       } else if ((e.key === '?' || (e.key === '/' && e.shiftKey)) && !e.metaKey && !e.ctrlKey && !e.altKey && !isEditing) {
         if (e.repeat) return
         if (openDialog && modalRef.current !== 'shortcuts') return
         e.preventDefault()
+        loadDialogs().catch(() => {})
         setSidebar(false)
         setModal(current => current === 'shortcuts' ? null : 'shortcuts')
       } else if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && document.activeElement === document.body) {
@@ -211,7 +247,7 @@ export default function App() {
     document.addEventListener('keydown', key)
     return () => document.removeEventListener('keydown', key)
   }, [])
-  const sources = useCallback(id => { setSourceId(id || null); setModal('sources') }, [])
+  const sources = useCallback(id => { loadDialogs().catch(() => {}); setSourceId(id || null); setModal('sources') }, [])
   const isFollowing=useCallback(()=>follow.current,[])
   const selectChat=useCallback(async(id)=>{
     loadMessage().catch(() => {})
@@ -480,34 +516,36 @@ export default function App() {
   const savedCount = workspace.state?.items?.length || 0
   const compareCount = workspace.state?.comparison?.length || 0
   const mentorTotalCount = Object.keys(polaris.insights || {}).length
-  const openMentors = useCallback(() => { closeSidebar(); polaris.dismissMentorAll(); workspace.close(); setModal('quick-search') }, [closeSidebar, polaris, workspace])
+  const openMentors = useCallback(() => { loadQuickSearch().catch(() => {}); closeSidebar(); polaris.dismissMentorAll(); workspace.close(); setModal('quick-search') }, [closeSidebar, polaris, workspace])
   const openLibrary = useCallback(() => { closeSidebar(); polaris.dismissMentorAll(); setModal(null); workspace.open('library') }, [closeSidebar, polaris, workspace])
   const focusAgent = useCallback(() => { closeSidebar(); polaris.dismissMentorAll(); setModal(null); workspace.close(); requestAnimationFrame(() => textarea.current?.focus()) }, [closeSidebar, polaris, workspace])
   const activeCore = modal === 'quick-search' ? 'mentors' : workspace.view ? 'library' : 'agent'
   useEffect(() => { document.title = chat?.title ? `${chat.title} · ${APP_NAME}` : APP_NAME }, [chat?.title])
-  const composer = <Composer ref={textarea} chat={chat} config={config} colleges={data?.metadata?.profile_colleges||data?.metadata?.colleges||[]} loading={loadingChat} busy={busy} stopping={stopping} text={text} onText={editText} onSend={() => send()} onStop={stop} onLatest={latest} showLatest={showLatest&&!isWelcome} onExecution={() => setModal('execution')}/>
+  const composer = <Composer ref={textarea} chat={chat} config={config} colleges={data?.metadata?.profile_colleges||data?.metadata?.colleges||[]} loading={loadingChat} busy={busy} stopping={stopping} text={text} onText={editText} onSend={() => send()} onStop={stop} onLatest={latest} showLatest={showLatest&&!isWelcome} onExecution={() => { loadDialogs().catch(() => {}); setModal('execution') }}/>
   return <div className="app-shell">
     {sidebar && <div className="sidebar-backdrop" onClick={closeSidebar}/>}
     <Sidebar chats={chats} chatId={chat?.id} usage={usage} configured={Boolean(config)} open={sidebar} collapsed={sidebarCollapsed} isMac={isMac} onCollapse={collapseSidebar} onClose={closeSidebar} onNew={newChat} onSelect={selectChat} onSearch={searchChats} onRemove={removeChat} onRename={showRename} onTrash={showTrash} onSettings={showSettings} onUsage={showUsage} onShortcuts={showShortcuts} onOpenMentors={openMentors} onWorkspace={openLibrary} />
-    <main className="chat-main"><header className="topbar"><div className="topbar-left"><button ref={sidebarToggle} className="icon-button desktop-sidebar-toggle" aria-label={sidebarCollapsed?"展开侧栏":"收起侧栏"} title={sidebarCollapsed?"展开侧栏":"收起侧栏"} aria-expanded={!sidebarCollapsed} aria-controls="sidebar-content" onClick={()=>setSidebarCollapsed(value=>!value)}>{sidebarCollapsed?<PanelLeftOpen size={18}/>:<PanelLeftClose size={18}/>}</button><button ref={mobileToggle} className="icon-button mobile-menu" aria-label="打开对话列表" aria-expanded={sidebar} onClick={() => setSidebar(true)}><Menu size={19}/></button><h1 className="topbar-topic" title={isWelcome ? undefined : chat.title}>{isWelcome ? '新对话' : chat.title}</h1></div><nav className="core-nav" aria-label="核心功能"><button type="button" className={'core-nav-btn'+(activeCore==='agent'?' active':'')} aria-label="Agent 交互" title="Agent 交互" aria-current={activeCore==='agent'?'page':undefined} onClick={focusAgent}><MessageSquare size={13} aria-hidden="true"/><span>Agent 交互</span></button><button type="button" className={'core-nav-btn quick-search-trigger'+(activeCore==='mentors'?' active':'')} aria-haspopup="dialog" aria-keyshortcuts="Meta+K Control+K" onClick={openMentors} aria-label="查看导师 · 速查导师档案" title={`查看全校导师档案（${isMac?'⌘K':'Ctrl+K'}）`}><Search size={13} aria-hidden="true"/><span>查看导师</span><kbd aria-hidden="true">{isMac?'⌘K':'Ctrl K'}</kbd></button><button type="button" className={'core-nav-btn workspace-open-button'+(activeCore==='library'?' active':'')} onClick={openLibrary} aria-label="候选库 · 打开选导师工作台" title="打开候选库"><Bookmark size={13} aria-hidden="true"/><span>候选库</span>{savedCount>0&&<small aria-hidden="true">{savedCount}</small>}</button></nav><div className="topbar-right">{config?.configured ? <div className="model-pill model-picker"><select aria-label="选择模型" value={shownModel} onFocus={loadModels} onChange={e => changeModel(e.target.value)} disabled={busy || modelLoading}>{!config.models?.some(m => m.id === shownModel) && <option value={shownModel}>{shownModel}</option>}{config.models?.map(m => <option key={m.id} value={m.id}>{modelLabel(m,{compact:true})}</option>)}</select>{modelLoading ? <LoaderCircle className="spin" size={12}/> : <ChevronDown size={13}/>}</div> : <button className="model-pill" onClick={() => config && setModal('settings')}>连接模型<ChevronDown size={13}/></button>}{config?.configured && <button className="reasoning-button" aria-label="推理强度与上下文设置" onClick={() => setModal('execution')} title="推理强度与上下文设置"><SlidersHorizontal size={14}/><span>推理 · {effortLabel(runningReply?.reasoningEffort || config.reasoningEffort || 'off')}</span></button>}<button className="data-button" aria-label="资料与来源" onClick={() => sources()} disabled={!data}><Database size={15}/><span>资料</span></button>{data && !vaultStatus?.locked && <ExportMenu variant="topbar" className="export-topbar-trigger" label={isWelcome ? '导出数据' : '多格式导出'} ariaLabel={isWelcome ? '快捷导出导师数据' : '导出为 Excel / PDF / Word'} showPresets={true} presetsOnly={isWelcome} getPayload={isWelcome ? undefined : (format => ({ kind: 'chat', format, chatId: chat.id, title: chat.title }))} onSuccess={({ filename }) => { if (!window.polarisDesktop?.isElectron) toast.success(`已导出 ${filename}`) }} onError={err => setError(err.message)} />}{!isWelcome && <button className="icon-button export-chat" aria-label="导出对话" title="导出对话 Markdown" onClick={exportChat}><FileText size={16}/></button>}</div></header>
-      {vaultStatus?.locked && <div className="vault-lock-banner" role="region" aria-label="导师加密库锁定提示"><div className="vault-lock-banner-copy"><Lock size={15} aria-hidden="true"/><span>导师加密库当前处于锁定状态（{vaultStatus.vaults || 5} 个加密数据集未解密），暂仅展示空目录。</span></div><button type="button" className="primary-button vault-lock-banner-btn" onClick={() => setModal('vault-unlock')}>解锁导师库</button></div>}
+    <main className="chat-main"><header className="topbar"><div className="topbar-left"><button ref={sidebarToggle} className="icon-button desktop-sidebar-toggle" aria-label={sidebarCollapsed?"展开侧栏":"收起侧栏"} title={sidebarCollapsed?"展开侧栏":"收起侧栏"} aria-expanded={!sidebarCollapsed} aria-controls="sidebar-content" onClick={()=>setSidebarCollapsed(value=>!value)}>{sidebarCollapsed?<PanelLeftOpen size={18}/>:<PanelLeftClose size={18}/>}</button><button ref={mobileToggle} className="icon-button mobile-menu" aria-label="打开对话列表" aria-expanded={sidebar} onClick={() => setSidebar(true)}><Menu size={19}/></button><h1 className="topbar-topic" title={isWelcome ? undefined : chat.title}>{isWelcome ? '新对话' : chat.title}</h1></div><nav className="core-nav" aria-label="核心功能"><button type="button" className={'core-nav-btn'+(activeCore==='agent'?' active':'')} aria-label="Agent 交互" title="Agent 交互" aria-current={activeCore==='agent'?'page':undefined} onClick={focusAgent}><MessageSquare size={13} aria-hidden="true"/><span>Agent 交互</span></button><button type="button" className={'core-nav-btn quick-search-trigger'+(activeCore==='mentors'?' active':'')} aria-haspopup="dialog" aria-keyshortcuts="Meta+K Control+K" onClick={openMentors} aria-label="查看导师 · 速查导师档案" title={`查看全校导师档案（${isMac?'⌘K':'Ctrl+K'}）`}><Search size={13} aria-hidden="true"/><span>查看导师</span><kbd aria-hidden="true">{isMac?'⌘K':'Ctrl K'}</kbd></button><button type="button" className={'core-nav-btn workspace-open-button'+(activeCore==='library'?' active':'')} onClick={openLibrary} aria-label="候选库 · 打开选导师工作台" title="打开候选库"><Bookmark size={13} aria-hidden="true"/><span>候选库</span>{savedCount>0&&<small aria-hidden="true">{savedCount}</small>}</button></nav><div className="topbar-right">{config?.configured ? <div className="model-pill model-picker"><select aria-label="选择模型" value={shownModel} onFocus={loadModels} onChange={e => changeModel(e.target.value)} disabled={busy || modelLoading}>{!config.models?.some(m => m.id === shownModel) && <option value={shownModel}>{shownModel}</option>}{config.models?.map(m => <option key={m.id} value={m.id}>{modelLabel(m,{compact:true})}</option>)}</select>{modelLoading ? <LoaderCircle className="spin" size={12}/> : <ChevronDown size={13}/>}</div> : <button className="model-pill" onClick={() => { if (config) { loadDialogs().catch(() => {}); setModal('settings') } }}>连接模型<ChevronDown size={13}/></button>}{config?.configured && <button className="reasoning-button" aria-label="推理强度与上下文设置" onClick={() => { loadDialogs().catch(() => {}); setModal('execution') }} title="推理强度与上下文设置"><SlidersHorizontal size={14}/><span>推理 · {effortLabel(runningReply?.reasoningEffort || config.reasoningEffort || 'off')}</span></button>}<button className="data-button" aria-label="资料与来源" onClick={() => sources()} disabled={!data}><Database size={15}/><span>资料</span></button>{data && !vaultStatus?.locked && <ExportMenu variant="topbar" className="export-topbar-trigger" label={isWelcome ? '导出数据' : '多格式导出'} ariaLabel={isWelcome ? '快捷导出导师数据' : '导出为 Excel / PDF / Word'} showPresets={true} presetsOnly={isWelcome} getPayload={isWelcome ? undefined : (format => ({ kind: 'chat', format, chatId: chat.id, title: chat.title }))} onSuccess={({ filename }) => { if (!window.polarisDesktop?.isElectron) toast.success(`已导出 ${filename}`) }} onError={err => setError(err.message)} />}{!isWelcome && <button className="icon-button export-chat" aria-label="导出对话" title="导出对话 Markdown" onClick={exportChat}><FileText size={16}/></button>}</div></header>
+      {vaultStatus?.locked && <div className="vault-lock-banner" role="region" aria-label="导师加密库锁定提示"><div className="vault-lock-banner-copy"><Lock size={15} aria-hidden="true"/><span>导师加密库当前处于锁定状态（{vaultStatus.vaults || 5} 个加密数据集未解密），暂仅展示空目录。</span></div><button type="button" className="primary-button vault-lock-banner-btn" onClick={() => { loadDialogs().catch(() => {}); setModal('vault-unlock') }}>解锁导师库</button></div>}
       {error && <div className="app-error" role="alert"><span>{error}</span><button onClick={() => config ? setError('') : initialize()}>{config ? '关闭' : '重试'}</button></div>}
       <div className="conversation-panel">
       <div className={`conversation-scroll${isWelcome ? ' is-empty' : ''}`} ref={scroll} role="region" aria-label="对话内容" tabIndex={0} onScroll={trackScroll} onWheel={event => scrollIntent(event.deltaY)} onTouchStart={event => { touchY.current = event.touches[0].clientY }} onTouchMove={touchScroll} onKeyDown={keyScroll}>
-        {isWelcome ? <div className="start-view"><Welcome data={data} failed={Boolean(error && !data)} mentorCount={mentorTotalCount} savedCount={savedCount} compareCount={compareCount} isMac={isMac} vaultLocked={Boolean(vaultStatus?.locked)} configured={config?.configured} onOpenSettings={() => setModal('settings')} onOpenMentors={openMentors} onOpenLibrary={openLibrary}>{composer}</Welcome></div> : <div className="messages"><Suspense fallback={<div className="message-skeleton" aria-busy="true" aria-label="正在加载对话"><span className="skeleton-box" style={{ width: '58%', height: 18, marginBottom: 12 }} /><span className="skeleton-box" style={{ width: '92%', height: 14, marginBottom: 8 }} /><span className="skeleton-box" style={{ width: '76%', height: 14 }} /></div>}>{chat.messages.map(m => <Message key={m.id} message={m} mentorTotal={data?.metadata?.counts?.mentors} onRetry={m===chat.messages.at(-1)&&!busy?retry:undefined} onFollowUp={m===chat.messages.at(-1)&&!busy?send:undefined} onSources={sources} isFollowing={isFollowing}/>)}</Suspense>{busy && chat.messages.at(-1)?.role === 'user' && <div className="connecting"><LoaderCircle className="spin" size={15}/><span>连接中…</span></div>}</div>}
+        {isWelcome ? <div className="start-view"><Welcome data={data} failed={Boolean(error && !data)} mentorCount={mentorTotalCount} savedCount={savedCount} compareCount={compareCount} isMac={isMac} vaultLocked={Boolean(vaultStatus?.locked)} configured={config?.configured} onOpenSettings={() => { loadDialogs().catch(() => {}); setModal('settings') }} onOpenMentors={openMentors} onOpenLibrary={openLibrary}>{composer}</Welcome></div> : <div className="messages"><Suspense fallback={<MessageListSkeleton/>}>{chat.messages.map(m => <Message key={m.id} message={m} mentorTotal={data?.metadata?.counts?.mentors} onRetry={m===chat.messages.at(-1)&&!busy?retry:undefined} onFollowUp={m===chat.messages.at(-1)&&!busy?send:undefined} onSources={sources} isFollowing={isFollowing}/>)}</Suspense>{busy && chat.messages.at(-1)?.role === 'user' && <div className="connecting"><LoaderCircle className="spin" size={15}/><span>连接中…</span></div>}</div>}
       </div>
       </div>
       {!isWelcome && composer}
     </main>
-    {['settings', 'execution'].includes(modal) && config && <Settings initialTab={modal === 'execution' ? 'execution' : 'connection'} config={config} onClose={closeModal} onSaved={c => { setConfig(c); setModal(null); toast.success(c.warning || '已保存');  textarea.current?.focus() }}/>}
-    {modal === 'vault-unlock' && <VaultUnlockDialog status={vaultStatus} onUnlocked={handleVaultUnlocked} onClose={closeModal}/>}
-    {modal === 'usage' && <Usage usage={usage} onClose={closeModal}/>}
-    {modal === 'shortcuts' && <ShortcutHelp isMac={isMac} onClose={closeModal}/>}
-    {modal === 'sources' && data && <Sources data={data} selected={sourceId} onClose={closeModal}/>}
-    {modal === 'rename' && renameTarget && <RenameConversation chat={renameTarget} onSave={renameChat} onClose={closeModal}/>}
-    {modal === 'trash' && <Trash onRestore={restoreChat} onClose={closeModal}/>}
-    {modal === 'quick-search' && <QuickSearch onClose={closeQuickSearch} onSuspend={closeModal} onReopen={() => setModal('quick-search')} savedStateRef={quickSearchState} onAsk={send} onOpenLibrary={openLibrary} busy={busy}/>}
-    <MentorDossier onAsk={send} busy={busy}/>
+    <Suspense fallback={null}>
+      {['settings', 'execution'].includes(modal) && config && <Settings initialTab={modal === 'execution' ? 'execution' : 'connection'} config={config} onClose={closeModal} onSaved={c => { setConfig(c); setModal(null); toast.success(c.warning || '已保存');  textarea.current?.focus() }}/>}
+      {modal === 'vault-unlock' && <VaultUnlockDialog status={vaultStatus} onUnlocked={handleVaultUnlocked} onClose={closeModal}/>}
+      {modal === 'usage' && <Usage usage={usage} onClose={closeModal}/>}
+      {modal === 'shortcuts' && <ShortcutHelp isMac={isMac} onClose={closeModal}/>}
+      {modal === 'sources' && data && <Sources data={data} selected={sourceId} onClose={closeModal}/>}
+      {modal === 'rename' && renameTarget && <RenameConversation chat={renameTarget} onSave={renameChat} onClose={closeModal}/>}
+      {modal === 'trash' && <Trash onRestore={restoreChat} onClose={closeModal}/>}
+      {modal === 'quick-search' && <QuickSearch onClose={closeQuickSearch} onSuspend={closeModal} onReopen={() => setModal('quick-search')} savedStateRef={quickSearchState} onAsk={send} onOpenLibrary={openLibrary} busy={busy}/>}
+      {polaris.dossier && <MentorDossier onAsk={send} busy={busy}/>}
+    </Suspense>
     {(workspace.view||workspace.message||workspace.error)&&<Suspense fallback={<div className="toast-stack" role="region" aria-label="通知提示"><div className="notice toast-item tone-info" role="status">正在打开工作台…</div></div>}><WorkspaceLayer onAsk={send} onOpenMentors={openMentors} busy={busy}/></Suspense>}
   </div>
 }

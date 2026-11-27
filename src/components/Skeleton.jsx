@@ -1,5 +1,16 @@
 import React from 'react'
 
+export function MessageListSkeleton() {
+  return (
+    <div className="message-skeleton" aria-busy="true">
+      <span className="sr-only" role="status">正在加载对话…</span>
+      <span className="skeleton-box" style={{ width: '58%', height: 18 }} aria-hidden="true" />
+      <span className="skeleton-box" style={{ width: '92%', height: 14 }} aria-hidden="true" />
+      <span className="skeleton-box" style={{ width: '76%', height: 14 }} aria-hidden="true" />
+    </div>
+  )
+}
+
 export function QuickSearchSkeleton({ rows = 5 }) {
   return (
     <div className="qs-skeleton-list" aria-busy="true">
