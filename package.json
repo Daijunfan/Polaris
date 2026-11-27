@@ -122,8 +122,21 @@
         "dmg",
         "zip"
       ],
+      "extraResources": [
+        {
+          "from": "build/mac-locales",
+          "to": "."
+        }
+      ],
       "extendInfo": {
-        "CFBundleDisplayName": "北极星 Polaris"
+        "CFBundleDisplayName": "北极星 Polaris",
+        "LSHasLocalizedDisplayName": true,
+        "CFBundleLocalizations": [
+          "en",
+          "zh_CN",
+          "zh-Hans"
+        ],
+        "CFBundleDevelopmentRegion": "en"
       }
     },
     "dmg": {
