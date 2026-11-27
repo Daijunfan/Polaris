@@ -9,7 +9,7 @@ test.beforeEach(async({request})=>{
 })
 async function open(page){
   await page.goto('/')
-  await page.getByRole('button',{name:'候选库 · 打开选导师工作台',exact:true}).click()
+  await page.getByRole('navigation',{name:'核心功能'}).getByRole('button',{name:'候选库',exact:true}).click()
   await expect(page.getByRole('heading',{name:'我的导师候选',exact:true})).toBeVisible()
 }
 async function note(page){
@@ -17,7 +17,8 @@ async function note(page){
   return page.getByRole('textbox',{name:'导师备注',exact:true})
 }
 
-test('备注在直接返回、Esc关闭和刷新后保留，最终写入本机记录',async({page,request})=>{
+test('备注在直接返回、切换页面和刷新后保留，最终写入本机记录',async({page,request})=>{
+  const nav=page.getByRole('navigation',{name:'核心功能'})
   await open(page)
   const first='已比较研究方向，准备联系。'
   await (await note(page)).fill(first)
@@ -25,13 +26,13 @@ test('备注在直接返回、Esc关闭和刷新后保留，最终写入本机�
   await expect(await note(page)).toHaveValue(first)
   const second='已约好交流，重点问本人指导与项目参与。'
   await (await noteInput(page)).fill(second)
-  await page.keyboard.press('Escape')
-  await page.getByRole('button',{name:'候选库 · 打开选导师工作台',exact:true}).click()
+  await nav.getByRole('button',{name:'Agent 交互',exact:true}).click()
+  await nav.getByRole('button',{name:'候选库',exact:true}).click()
   await expect(await note(page)).toHaveValue(second)
   const third='刷新后继续整理的个人记录。'
   await (await noteInput(page)).fill(third)
   await page.reload()
-  await page.getByRole('button',{name:'候选库 · 打开选导师工作台',exact:true}).click()
+  await expect(page.getByRole('region',{name:'候选库',exact:true})).toBeVisible()
   await expect(await note(page)).toHaveValue(third)
   await expect.poll(async()=>((await (await request.get('/api/workbench')).json()).items.find(row=>row.name==='南国顺').note)).toBe(third)
 })
@@ -65,7 +66,7 @@ test('清单可以移出单个人选且保留收藏与备注，中文联系进�
 
 test('候选库支持表格与卡片视图切换并导出当前结果',async({page})=>{
   await open(page)
-  const library=page.getByRole('dialog',{name:'候选库',exact:true})
+  const library=page.getByRole('region',{name:'候选库',exact:true})
   await expect(library).toBeVisible()
   await expect(library.getByRole('button',{name:/对比分析/})).toHaveCount(0)
   await expect(library.getByRole('button',{name:/加入对比/})).toHaveCount(0)

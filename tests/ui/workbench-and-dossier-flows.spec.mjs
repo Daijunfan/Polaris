@@ -27,8 +27,8 @@ function attachRuntimeErrorGate(page) {
 test('工作台目录分页、收藏撤销、公式注入防卫 CSV 导出与 HTML/MD 报告', async ({ page, request }) => {
   const errors = attachRuntimeErrorGate(page)
   await page.goto('/')
-  await page.getByRole('button', { name: '候选库 · 打开选导师工作台', exact: true }).click()
-  const lib = page.getByRole('dialog', { name: '候选库', exact: true })
+  await page.getByRole('button', { name: '候选库', exact: true }).click()
+  const lib = page.getByRole('region', { name: '候选库', exact: true })
   await expect(lib).toBeVisible()
 
   // Directory discovery & pagination
@@ -90,7 +90,7 @@ test('工作台目录分页、收藏撤销、公式注入防卫 CSV 导出与 HT
   await expect(lib.locator('.mentor-tile-name')).toHaveText(['付俊松'])
   await expect(lib.locator('.mentor-note-preview')).toContainText('=CMD')
 
-  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Agent 交互', exact: true }).click()
   errors.assertClean()
 })
 
@@ -114,8 +114,8 @@ test('导师档案嵌套返回栈（实际带教）、纯官网档案、六维�
   expect(officialOnlyMentor, 'Expected at least one official-only mentor').toBeTruthy()
 
   await page.goto('/')
-  await page.getByRole('button', { name: '查看导师 · 速查导师档案', exact: true }).click()
-  const quick = page.getByRole('dialog', { name: '查看导师', exact: true })
+  await page.getByRole('button', { name: '查看导师', exact: true }).click()
+  const quick = page.getByRole('region', { name: '查看导师', exact: true })
   const searchBox = quick.getByRole('textbox', { name: '搜索导师姓名、方向或关键词' })
 
   // XSS-safe query + incompatible filters recovery

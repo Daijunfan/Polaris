@@ -17,7 +17,7 @@ const audit=async page=>{
 
 async function openWorkbench(page){
   await page.goto('/')
-  await page.getByRole('button',{name:'候选库 · 打开选导师工作台',exact:true}).click()
+  await page.getByRole('button',{name:'候选库',exact:true}).click()
   await expect(page.getByRole('heading',{name:'我的导师候选',exact:true})).toBeVisible()
 }
 
@@ -71,8 +71,8 @@ test('跨学院同名导师候选与14院画像多选不截断',async({page,requ
   expect(saved.profile.colleges).toHaveLength(collegeCount)
   expect(saved.profile.colleges).toContain('信息与通信工程学院')
 
-  await page.getByRole('button',{name:'候选库 · 打开选导师工作台',exact:true}).click()
-  const library=page.getByRole('dialog',{name:'候选库',exact:true})
+  await page.getByRole('button',{name:'候选库',exact:true}).click()
+  const library=page.getByRole('region',{name:'候选库',exact:true})
   await expect(library).toBeVisible()
   await expect(page.getByRole('heading',{name:'我的导师候选',exact:true})).toBeVisible()
 

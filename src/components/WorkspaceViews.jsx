@@ -8,7 +8,7 @@ import { AgentMark } from './Polaris.jsx'
 import SidebarPane from './SidebarPane.jsx'
 import {ProfileBar} from './ProfileBar.jsx'
 
-export const Sidebar = memo(function Sidebar({ chats, chatId, usage, configured, open, collapsed, isMac = false, onCollapse, onClose, onNew, onSelect, onSearch, onRemove, onRename, onTrash, onSettings, onUsage, onShortcuts, onOpenMentors, onWorkspace }) {
+export const Sidebar = memo(function Sidebar({ chats, chatId, usage, configured, open, collapsed, isMac = false, onCollapse, onClose, onNew, onSelect, onSearch, onRemove, onRename, onTrash, onSettings, onUsage, onShortcuts }) {
   const { resolved, toggleQuickTheme } = useTheme()
   const [search,setSearch] = useState('')
   const [found,setFound] = useState({query:'',items:[]}),[searchError,setSearchError] = useState('')
@@ -32,8 +32,6 @@ export const Sidebar = memo(function Sidebar({ chats, chatId, usage, configured,
       {shown.map(c => <div className={`history-item ${chatId === c.id ? 'active' : ''}`} key={c.id}><button onClick={() => onSelect(c.id)} title={c.title}><MessageSquare size={14}/><span>{c.title}</span>{c.running && <i className="history-running"/>}</button><div className="history-actions"><button aria-label={`重命名对话 ${c.title}`} title="重命名" onClick={()=>onRename(c)}><Pencil size={13}/></button><button disabled={c.running} aria-label={`移到回收站 ${c.title}`} title="移到回收站" onClick={() => onRemove(c.id)}><Trash2 size={13}/></button></div></div>)}
     </nav>
     <div className="sidebar-bottom">
-      {onOpenMentors&&<button className="sidebar-workspace" onClick={onOpenMentors}><Search size={15}/><span>查看导师</span><ChevronRight size={14}/></button>}
-      <button className="sidebar-workspace" onClick={onWorkspace}><Bookmark size={15}/><span>候选库</span><ChevronRight size={14}/></button>
       <button className="usage-summary" onClick={onUsage} aria-label="Token 用量"><Coins size={16}/><span>Token 用量</span><strong>{compactNumber(usage?.totalTokens || 0)}</strong></button>
       <div className="sidebar-settings-row"><button className="sidebar-setting" onClick={onSettings} disabled={!configured}><Settings2 size={16}/><span>设置</span><ChevronRight size={14}/></button><button className="icon-button" aria-label="切换深色模式" aria-pressed={resolved === 'dark'} title={resolved === 'dark' ? '切换为浅色模式' : '切换为深色模式'} onClick={toggleQuickTheme}>{resolved === 'dark' ? <Sun size={16}/> : <Moon size={16}/>}</button>{onShortcuts&&<button className="icon-button" aria-label="快捷键" title={`快捷键（${isMac?'⌘/':'Ctrl+/'} 或 ?）`} onClick={onShortcuts}><Keyboard size={16}/></button>}<button className="icon-button" aria-label="回收站" title="回收站" onClick={onTrash}><Trash2 size={16}/></button></div>
     </div>

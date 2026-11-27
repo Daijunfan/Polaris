@@ -55,9 +55,10 @@ test('跟随系统深色模式首屏无闪烁生效，全部核心视图、弹�
   await auditA11y(page, 'dark-settings-appearance')
   await page.keyboard.press('Escape')
 
+  const nav = page.getByRole('navigation', { name: '核心功能' })
   // QuickSearch with filter & drawer open
-  await page.getByRole('button', { name: '查看导师 · 速查导师档案', exact: true }).click()
-  const quick = page.getByRole('dialog', { name: '查看导师', exact: true })
+  await nav.getByRole('button', { name: '查看导师', exact: true }).click()
+  const quick = page.getByRole('region', { name: '查看导师', exact: true })
   await quick.getByRole('button', { name: '可以实习', exact: true }).click()
   await quick.getByRole('button', { name: /^所属学院/ }).click()
   await auditA11y(page, 'dark-quicksearch-drawer')
@@ -75,20 +76,20 @@ test('跟随系统深色模式首屏无闪烁生效，全部核心视图、弹�
   await auditA11y(page, 'dark-dossier-mobile-390')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.keyboard.press('Escape')
-  await page.keyboard.press('Escape')
 
+  await nav.getByRole('button', { name: 'Agent 交互', exact: true }).click()
   await auditA11y(page, 'dark-welcome-mobile-390')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
   // Back to desktop for Workbench (cards + table) and Ranking Chat
   await page.setViewportSize({ width: 1440, height: 1000 })
-  await page.getByRole('button', { name: '候选库 · 打开选导师工作台', exact: true }).click()
-  const lib = page.getByRole('dialog', { name: '候选库', exact: true })
+  await nav.getByRole('button', { name: '候选库', exact: true }).click()
+  const lib = page.getByRole('region', { name: '候选库', exact: true })
   await expect(lib.locator('.mentor-tile')).toHaveCount(2)
   await auditA11y(page, 'dark-workbench-cards')
   await lib.getByRole('button', { name: '候选表格视图', exact: true }).click()
   await auditA11y(page, 'dark-workbench-table')
-  await page.keyboard.press('Escape')
+  await nav.getByRole('button', { name: 'Agent 交互', exact: true }).click()
 
   // Completed chat with 前30 ranking artifact
   await page.getByRole('textbox', { name: '向北极星提问' }).fill('把多个学院的老师放一起，来个你认为最好的导师的排名。只前30个最好的导师就够了。')

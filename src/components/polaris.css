@@ -331,9 +331,6 @@ body{background:var(--canvas);-webkit-font-smoothing:antialiased}
 .qs-lib-jump{color:var(--accent);border-color:var(--accent-border);background:var(--accent-soft)}
 
 /* ---------- Quick Search / 查看导师 (⌘K) ---------- */
-.quick-search-modal .modal-panel{width:min(920px,96vw);padding:15px 20px 14px;display:flex;flex-direction:column;max-height:min(850px,92dvh);overflow:hidden}
-.quick-search-modal .modal-header{margin-bottom:10px}
-.quick-search-modal .modal-header h2{font-size:17px;font-weight:700}
 .qs-header-tools{display:flex;align-items:center;gap:8px}
 .quick-search-meta{font-size:12px;color:#475569;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap}
 .qs-lib-btn{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:999px;background:var(--accent-soft);border:1px solid var(--accent-border);color:var(--accent);font-size:11.5px;font-weight:600;white-space:nowrap}
@@ -445,11 +442,6 @@ body{background:var(--canvas);-webkit-font-smoothing:antialiased}
   .profile-inline{grid-template-columns:1fr}
   .dossier-facts dl>div{grid-template-columns:1fr;gap:4px}
   .qs-open-btn,.qs-bar-sep,.qs-kbd-legend{display:none}
-  .quick-search-modal .modal-panel{padding:14px 13px;max-height:92dvh}
-  .quick-search-modal .modal-header{position:relative;flex-wrap:wrap;gap:8px;padding-right:40px}
-  .quick-search-modal .modal-header-main{flex:1 1 auto;min-width:0}
-  .quick-search-modal .modal-header-actions{flex:1 1 100%;max-width:100%;min-width:0;flex-shrink:1}
-  .quick-search-modal .modal-header-actions>.icon-button[aria-label="关闭面板"]{position:absolute;top:0;right:0;margin:0}
   .qs-header-tools{width:100%;flex-wrap:wrap;justify-content:space-between;gap:6px}
   .quick-search-box{padding:0 8px 0 11px;gap:7px;height:38px}
   .quick-search-box input{font-size:13px}

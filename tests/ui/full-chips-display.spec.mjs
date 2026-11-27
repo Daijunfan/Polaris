@@ -43,8 +43,8 @@ test('多标签导师在画像栏、速查、候选卡片与导师档案完整�
   await expect(pillChips).not.toContainText(/\+\s*\d/)
 
   // 速查：付俊松的 8 个正面标签全部以独立标签出现，没有展开更多按钮。
-  await page.getByRole('button',{name:'查看导师 · 速查导师档案',exact:true}).click()
-  const quick=page.getByRole('dialog',{name:'查看导师',exact:true})
+  await page.getByRole('button',{name:'查看导师',exact:true}).click()
+  const quick=page.getByRole('region',{name:'查看导师',exact:true})
   await quick.getByRole('textbox',{name:'搜索导师姓名、方向或关键词'}).fill('付俊松')
   const quickItem=quick.locator('.qs-item').filter({hasText:'付俊松'})
   await expect(quickItem).toHaveCount(1)
@@ -52,12 +52,12 @@ test('多标签导师在画像栏、速查、候选卡片与导师档案完整�
   await expect(quickItem.locator('.tone-more')).toHaveCount(0)
   await expect(quickItem).toContainText('经费充足')
   await expect(quickItem).toContainText('补助 ¥2000/月')
-  await page.keyboard.press('Escape')
-  await expect(quick).toHaveCount(0)
+  await page.getByRole('button',{name:'Agent 交互',exact:true}).click()
+  await expect(quick).toBeHidden()
 
   // 候选卡片：标签与实习、补助、管理三项事实完整显示，不截断。
-  await page.getByRole('button',{name:'候选库 · 打开选导师工作台',exact:true}).click()
-  const library=page.getByRole('dialog',{name:'候选库',exact:true})
+  await page.getByRole('button',{name:'候选库',exact:true}).click()
+  const library=page.getByRole('region',{name:'候选库',exact:true})
   await expect(library).toBeVisible()
   await expect(page.getByRole('heading',{name:'我的导师候选',exact:true})).toBeVisible()
   const tile=page.locator('.mentor-tile').filter({hasText:'付俊松'})

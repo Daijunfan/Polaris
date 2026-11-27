@@ -48,7 +48,7 @@ test('390px 触屏移动端满足无缩放输入、触控优化、零横向溢�
   await auditA11y(page, 'mobile-welcome-light')
 
   // Touch action check
-  const touchAction = await page.getByRole('button', { name: '查看导师 · 速查导师档案', exact: true }).evaluate(
+  const touchAction = await page.getByRole('button', { name: '查看导师', exact: true }).evaluate(
     el => getComputedStyle(el).touchAction
   )
   expect(touchAction).toBe('manipulation')
@@ -60,8 +60,8 @@ test('390px 触屏移动端满足无缩放输入、触控优化、零横向溢�
   expect(composerFontSize).toBeGreaterThanOrEqual(16)
 
   // Quick search open + a11y + overflow + coarse pointer font-size check
-  await page.getByRole('button', { name: '查看导师 · 速查导师档案', exact: true }).click()
-  const qs = page.getByRole('dialog', { name: '查看导师', exact: true })
+  await page.getByRole('button', { name: '查看导师', exact: true }).click()
+  const qs = page.getByRole('region', { name: '查看导师', exact: true })
   await expect(qs).toBeVisible()
   await expectNoOverflow(page, 'mobile-quicksearch-light')
   await auditA11y(page, 'mobile-quicksearch-light')
@@ -83,14 +83,13 @@ test('390px 触屏移动端满足无缩放输入、触控优化、零横向溢�
   await expectNoOverflow(page, 'mobile-dossier-light')
 
   await page.keyboard.press('Escape')
-  if (await qs.isVisible().catch(() => false)) await page.keyboard.press('Escape')
 
   // Workbench mobile overflow check
-  await page.getByRole('button', { name: '候选库 · 打开选导师工作台', exact: true }).click()
-  const lib = page.getByRole('dialog', { name: '候选库', exact: true })
+  await page.getByRole('button', { name: '候选库', exact: true }).click()
+  const lib = page.getByRole('region', { name: '候选库', exact: true })
   await expect(lib).toBeVisible()
   await expectNoOverflow(page, 'mobile-workbench-light')
-  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Agent 交互', exact: true }).click()
 
   // Dark mode pass on welcome + quick search
   await page.emulateMedia({ colorScheme: 'dark' })
@@ -99,7 +98,7 @@ test('390px 触屏移动端满足无缩放输入、触控优化、零横向溢�
   await expectNoOverflow(page, 'mobile-welcome-dark')
   await auditA11y(page, 'mobile-welcome-dark')
 
-  await page.getByRole('button', { name: '查看导师 · 速查导师档案', exact: true }).click()
+  await page.getByRole('button', { name: '查看导师', exact: true }).click()
   await expect(qs).toBeVisible()
   await expectNoOverflow(page, 'mobile-quicksearch-dark')
   await auditA11y(page, 'mobile-quicksearch-dark')

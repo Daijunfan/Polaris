@@ -117,9 +117,10 @@ test('工作台与速查/导师档案（卡片、表格、详情、空状态、3
   await request.post('/api/workbench/items', { data: { mentors: [{ name: '付俊松' }, { name: '郭燕慧' }] } })
   await page.goto('/')
 
+  const nav = page.getByRole('navigation', { name: '核心功能' })
   // Workbench: cards, table, detail (desktop + 390px mobile)
-  await page.getByRole('button', { name: '候选库 · 打开选导师工作台', exact: true }).click()
-  const lib = page.getByRole('dialog', { name: '候选库', exact: true })
+  await nav.getByRole('button', { name: '候选库', exact: true }).click()
+  const lib = page.getByRole('region', { name: '候选库', exact: true })
   await expect(lib.locator('.mentor-tile')).toHaveCount(2)
   await auditA11y(page, 'workbench-cards-desktop')
   await lib.getByRole('button', { name: '候选表格视图', exact: true }).click()
@@ -131,12 +132,11 @@ test('工作台与速查/导师档案（卡片、表格、详情、空状态、3
 
   await page.setViewportSize({ width: 390, height: 844 })
   await auditA11y(page, 'workbench-detail-mobile')
-  await page.keyboard.press('Escape')
 
   // QuickSearch with empty-state + MentorDossier at mobile 390px
   await page.setViewportSize({ width: 1440, height: 1000 })
-  await page.getByRole('button', { name: '查看导师 · 速查导师档案', exact: true }).click()
-  const quick = page.getByRole('dialog', { name: '查看导师', exact: true })
+  await nav.getByRole('button', { name: '查看导师', exact: true }).click()
+  const quick = page.getByRole('region', { name: '查看导师', exact: true })
   await quick.getByRole('button', { name: '可以实习', exact: true }).click()
   await quick.getByRole('button', { name: /^所属学院/ }).click()
   await auditA11y(page, 'quicksearch-drawer-desktop')
@@ -150,7 +150,6 @@ test('工作台与速查/导师档案（卡片、表格、详情、空状态、3
   await expect(dossier).toBeVisible()
   await page.setViewportSize({ width: 390, height: 844 })
   await auditA11y(page, 'dossier-mobile-390')
-  await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
 
   errors.assertClean()
@@ -180,11 +179,13 @@ test('全局快捷键、表格排序 aria-sort、图表键盘导航及剪贴板�
   await page.keyboard.press('/')
   await expect(composer).toBeFocused()
 
-  // Global Ctrl+K toggles QuickSearch open & closed
+  // Global Ctrl+K switches to 查看导师 and focuses search, then top nav returns to Agent
   await page.keyboard.press('Control+k')
-  await expect(page.getByRole('dialog', { name: '查看导师', exact: true })).toBeVisible()
-  await page.keyboard.press('Control+k')
-  await expect(page.getByRole('dialog', { name: '查看导师', exact: true })).toHaveCount(0)
+  const quickPage = page.getByRole('region', { name: '查看导师', exact: true })
+  await expect(quickPage).toBeVisible()
+  await expect(quickPage.getByRole('textbox', { name: '搜索导师姓名、方向或关键词' })).toBeFocused()
+  await page.getByRole('navigation', { name: '核心功能' }).getByRole('button', { name: 'Agent 交互', exact: true }).click()
+  await expect(quickPage).toBeHidden()
 
   // Chart keyboard navigation + DataTable aria-sort + Clipboard copy & failure fallback
   await page.getByRole('textbox', { name: '向北极星提问' }).fill('推荐导师并展示评分图表')

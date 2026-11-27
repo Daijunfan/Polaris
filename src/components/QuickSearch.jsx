@@ -1,6 +1,5 @@
-import React,{useDeferredValue,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react'
+import React,{useDeferredValue,useEffect,useMemo,useRef,useState} from 'react'
 import {Bookmark,Check,ChevronDown,CornerDownLeft,GraduationCap,MessageCircleQuestion,RotateCcw,Search,Sparkles,X} from 'lucide-react'
-import Dialog from './Dialog.jsx'
 import {Avatar,FlagChips,MatchRing,Stars} from './MentorInsight.jsx'
 import ExportMenu from './ExportMenu.jsx'
 import {usePolaris} from '../insights.jsx'
@@ -14,26 +13,22 @@ import {QuickSearchSkeleton} from './Skeleton.jsx'
 const PRIORITY_COLLEGES=['网络空间安全学院','计算机学院','人工智能学院','软件学院']
 const HOT_FILTER_IDS=['internship_ok','no_clock','no_paper','doctoral','dir_llm','dir_6g']
 
-export default function QuickSearch({onClose,onSuspend,onReopen,savedStateRef,onAsk,onOpenLibrary,busy=false}){
+export default function QuickSearch({active=true,focusSignal=0,onAsk,onOpenLibrary,busy=false}){
   const polaris=usePolaris(),w=useWorkspace()
-  const sessionInit=useMemo(()=>(savedStateRef?.current?null:loadQuickSearchSessionFilters()),[])
-  const init=savedStateRef?.current||sessionInit||{}
-  const [query,setQuery]=useState(init.query||'')
+  const sessionInit=useMemo(()=>loadQuickSearchSessionFilters(),[])
+  const init=sessionInit||{}
+  const [query,setQuery]=useState('')
   const deferredQuery=useDeferredValue(query)
   const [selectedColleges,setSelectedColleges]=useState(init.selectedColleges||[])
   const [selectedFilters,setSelectedFilters]=useState(init.selectedFilters||[])
   const [directionMode,setDirectionMode]=useState(init.directionMode||'and')
-  const [openCategory,setOpenCategory]=useState(init.openCategory||null)
-  const [activeIndex,setActiveIndex]=useState(init.activeIndex||0)
-  const [limitCount,setLimitCount]=useState(init.limitCount||20)
+  const [openCategory,setOpenCategory]=useState(null)
+  const [activeIndex,setActiveIndex]=useState(0)
+  const [limitCount,setLimitCount]=useState(20)
   const inputRef=useRef(null),listRef=useRef(null),mountedRef=useRef(false)
-  useEffect(()=>{inputRef.current?.focus()},[])
+  useEffect(()=>{if(active)inputRef.current?.focus({preventScroll:true})},[active])
+  useEffect(()=>{if(focusSignal>0&&active){inputRef.current?.focus({preventScroll:true});inputRef.current?.select?.()}},[focusSignal,active])
   useEffect(()=>{saveQuickSearchSessionFilters({selectedColleges,selectedFilters,directionMode})},[selectedColleges,selectedFilters,directionMode])
-  useLayoutEffect(()=>{
-    if(!listRef.current||(!init.scrollTop&&!init.activeIndex))return
-    if(init.scrollTop)listRef.current.scrollTop=init.scrollTop
-    if(init.activeIndex>0)listRef.current.querySelectorAll('[data-qs-item]')[init.activeIndex]?.scrollIntoView({block:'nearest'})
-  },[])
 
   const allMentors=useMemo(()=>Object.values(polaris.insights||{}),[polaris.insights])
   const colleges=useMemo(()=>{
@@ -122,31 +117,24 @@ export default function QuickSearch({onClose,onSuspend,onReopen,savedStateRef,on
 
   function openDossier(item,idx=safeIndex){
     if(!item)return
-    if(savedStateRef){
-      savedStateRef.current={query,selectedColleges,selectedFilters,directionMode,openCategory,activeIndex:idx,limitCount:Math.max(limitCount,idx+1),scrollTop:listRef.current?.scrollTop||0}
-    }
-    ;(onSuspend||onClose)()
     polaris.openMentor(item,{
       origin:{
         label:'返回查看导师',
         list:sortedResults,
         index:idx,
-        onStep:(nextIdx)=>{
-          if(savedStateRef?.current){
-            savedStateRef.current.activeIndex=nextIdx
-            savedStateRef.current.limitCount=Math.max(savedStateRef.current.limitCount||20,nextIdx+1)
-          }
-        },
-        onReturn:()=>onReopen?.(),
+        onStep:(nextIdx)=>setActiveIndex(nextIdx),
       },
     })
   }
   function askMentor(item){
     if(!item||!onAsk)return
-    onClose()
     onAsk(`详细分析${item.name}（${item.college}）的研究方向、培养风格与优缺点风险，结合评价归纳与公开档案说明。`)
   }
   function onKeyDown(event){
+    if(event.key==='Escape'){
+      if(query){event.preventDefault();setQuery('')}
+      return
+    }
     if(!results.length)return
     if(event.key==='ArrowDown'){
       event.preventDefault()
@@ -184,12 +172,16 @@ export default function QuickSearch({onClose,onSuspend,onReopen,savedStateRef,on
       onSuccess={({ filename }) => w?.setMessage?.(`已导出 ${filename}`)}
       onError={err => w?.fail?.(err)}
     />
-    {onOpenLibrary&&<button type="button" className="qs-lib-btn" onClick={()=>{onClose();onOpenLibrary()}}>
+    {onOpenLibrary&&<button type="button" className="qs-lib-btn" onClick={()=>onOpenLibrary()}>
       <Bookmark size={12} aria-hidden="true"/>候选库{savedCount?` (${savedCount})`:''}
     </button>}
   </div>
 
-  return <Dialog title="查看导师" headerActions={headerActions} className="quick-search-modal" onClose={onClose}>
+  return <section className="app-page-panel mentors-page" aria-labelledby="mentors-page-title">
+    <header className="page-header">
+      <h2 id="mentors-page-title">查看导师</h2>
+      {headerActions}
+    </header>
     <div className="qs-top-shell">
       <div className="quick-search-box">
         <Search size={16} aria-hidden="true"/>
@@ -310,6 +302,6 @@ export default function QuickSearch({onClose,onSuspend,onReopen,savedStateRef,on
       })}
       {totalMatches>results.length&&<li className="qs-more-row"><button type="button" className="secondary-button qs-more-btn" onClick={()=>setLimitCount(c=>c+32)}>显示更多匹配导师（余 {totalMatches-results.length} 位）</button></li>}
     </ul>}
-    <footer className="qs-kbd-legend" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> 选择</span><span><kbd>Enter</kbd> 打开档案</span><span><kbd>Shift</kbd>+<kbd>Enter</kbd> 向北极星提问</span><span><kbd>Esc</kbd> 关闭</span></footer>
-  </Dialog>
+    <footer className="qs-kbd-legend" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> 选择</span><span><kbd>Enter</kbd> 打开档案</span><span><kbd>Shift</kbd>+<kbd>Enter</kbd> 向北极星提问</span></footer>
+  </section>
 }

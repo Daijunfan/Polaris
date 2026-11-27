@@ -93,13 +93,12 @@ test('首页、速查、档案、候选库与弹窗在五档桌面与移动端�
 
   // QuickSearch across key viewports
   await page.setViewportSize({ width: 1440, height: 1000 })
-  await page.getByRole('button', { name: '查看导师 · 速查导师档案', exact: true }).click()
-  const quick = page.getByRole('dialog', { name: '查看导师', exact: true })
+  await page.getByRole('button', { name: '查看导师', exact: true }).click()
+  const quick = page.getByRole('region', { name: '查看导师', exact: true })
   await expect(quick).toBeVisible()
   const kbdLegend = quick.locator('.qs-kbd-legend')
   await expect(kbdLegend).toBeVisible()
   await expect(kbdLegend).toContainText('打开档案')
-  await expect(kbdLegend).toContainText('关闭')
   for (const vp of VIEWPORTS) {
     await page.setViewportSize({ width: vp.width, height: vp.height })
     await assertViewportLayoutClean(page, `quick-search-${vp.name}`)
@@ -130,18 +129,17 @@ test('首页、速查、档案、候选库与弹窗在五档桌面与移动端�
     await assertViewportLayoutClean(page, `dossier-${vp.name}`)
   }
   await page.keyboard.press('Escape')
-  await page.keyboard.press('Escape')
 
   // Workbench across desktop, laptop, mobile
   await page.setViewportSize({ width: 1440, height: 1000 })
-  await page.getByRole('button', { name: '候选库 · 打开选导师工作台', exact: true }).click()
-  const lib = page.getByRole('dialog', { name: '候选库', exact: true })
+  await page.getByRole('button', { name: '候选库', exact: true }).click()
+  const lib = page.getByRole('region', { name: '候选库', exact: true })
   await expect(lib).toBeVisible()
   for (const vp of [VIEWPORTS[0], VIEWPORTS[1], VIEWPORTS[3], VIEWPORTS[4]]) {
     await page.setViewportSize({ width: vp.width, height: vp.height })
     await assertViewportLayoutClean(page, `workbench-${vp.name}`)
   }
-  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Agent 交互', exact: true }).click()
 
   // Secondary modals on mobile 360x800
   await page.setViewportSize({ width: 360, height: 800 })

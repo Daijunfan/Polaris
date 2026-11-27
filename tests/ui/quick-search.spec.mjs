@@ -17,9 +17,10 @@ const audit=async page=>{
 }
 
 test('快捷键 Ctrl+K 与顶栏按钮打开速查导师，支持同音姓、方向过滤、方向键与 Enter 直达档案且通过无障碍检查',async({page})=>{
+  const nav=page.getByRole('navigation',{name:'核心功能'})
   await page.goto('/')
-  await page.getByRole('button',{name:'查看导师 · 速查导师档案',exact:true}).click()
-  const quick=page.getByRole('dialog',{name:'查看导师',exact:true})
+  await nav.getByRole('button',{name:'查看导师',exact:true}).click()
+  const quick=page.getByRole('region',{name:'查看导师',exact:true})
   await expect(quick).toBeVisible()
   await audit(page)
 
@@ -34,7 +35,6 @@ test('快捷键 Ctrl+K 与顶栏按钮打开速查导师，支持同音姓、方
 
   await input.press('ArrowDown')
   await input.press('Enter')
-  await expect(quick).toHaveCount(0)
   const dossier=page.getByRole('dialog',{name:'导师档案',exact:true})
   await expect(dossier).toBeVisible()
   await expect(dossier.getByRole('button',{name:'返回查看导师',exact:true})).toBeVisible()
@@ -58,12 +58,12 @@ test('快捷键 Ctrl+K 与顶栏按钮打开速查导师，支持同音姓、方
   await expect(quick).toBeVisible()
   await expect(quick.getByRole('button',{name:'6G',exact:true})).toHaveAttribute('aria-pressed','true')
 
-  await page.keyboard.press('Escape')
-  await expect(quick).toHaveCount(0)
+  await nav.getByRole('button',{name:'Agent 交互',exact:true}).click()
+  await expect(quick).toBeHidden()
 
   await page.setViewportSize({width:390,height:844})
   await page.keyboard.press('Control+k')
-  const mobileQuick=page.getByRole('dialog',{name:'查看导师',exact:true})
+  const mobileQuick=page.getByRole('region',{name:'查看导师',exact:true})
   await expect(mobileQuick).toBeVisible()
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
   await audit(page)
@@ -80,20 +80,21 @@ test('推荐追问的全部收入候选库动作直接生效，无需额外模�
   await expect(saveAll).toBeVisible({timeout:15000})
   await saveAll.click()
 
-  await expect(page.getByRole('dialog',{name:'候选库',exact:true})).toBeVisible({timeout:15000})
+  await expect(page.getByRole('region',{name:'候选库',exact:true})).toBeVisible({timeout:15000})
   await expect(page.getByRole('heading',{name:'我的导师候选',exact:true})).toBeVisible()
   await expect.poll(()=>page.locator('.mentor-tile').count()).toBeGreaterThanOrEqual(2)
 })
 
 test('速查导师支持多维度多选 filter 叠加、学院多选、单项移除与一键清空且无障碍达标',async({page})=>{
+  const nav=page.getByRole('navigation',{name:'核心功能'})
   await page.goto('/')
-  // 首页输入框下方的「查看导师」入口卡片同样能打开速查。
+  // 首页输入框下方的「查看导师」入口卡片同样能打开查看导师页。
   await page.getByRole('region',{name:'导师与候选入口'}).getByRole('button',{name:/查看导师/}).click()
-  await expect(page.getByRole('dialog',{name:'查看导师',exact:true})).toBeVisible()
-  await page.keyboard.press('Escape')
-  await expect(page.getByRole('dialog',{name:'查看导师',exact:true})).toHaveCount(0)
-  await page.getByRole('button',{name:'查看导师 · 速查导师档案',exact:true}).click()
-  const quick=page.getByRole('dialog',{name:'查看导师',exact:true})
+  await expect(page.getByRole('region',{name:'查看导师',exact:true})).toBeVisible()
+  await nav.getByRole('button',{name:'Agent 交互',exact:true}).click()
+  await expect(page.getByRole('region',{name:'查看导师',exact:true})).toBeHidden()
+  await nav.getByRole('button',{name:'查看导师',exact:true}).click()
+  const quick=page.getByRole('region',{name:'查看导师',exact:true})
   await expect(quick).toBeVisible()
   await expect(quick.getByRole('button',{name:/加入对比/})).toHaveCount(0)
 
@@ -213,8 +214,8 @@ test('速查导师支持多维度多选 filter 叠加、学院多选、单项移
 
 test('导师档案采用紧凑 Bento 双栏排版：崔哲与付俊松档案左右等高无大面积留白且通过无障碍检查',async({page})=>{
   await page.goto('/')
-  await page.getByRole('button',{name:'查看导师 · 速查导师档案',exact:true}).click()
-  const quick=page.getByRole('dialog',{name:'查看导师',exact:true})
+  await page.getByRole('navigation',{name:'核心功能'}).getByRole('button',{name:'查看导师',exact:true}).click()
+  const quick=page.getByRole('region',{name:'查看导师',exact:true})
   await expect(quick).toBeVisible()
 
   const input=quick.getByRole('textbox',{name:'搜索导师姓名、方向或关键词'})

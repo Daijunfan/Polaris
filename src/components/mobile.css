@@ -28,9 +28,8 @@ label {
     padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   }
 
-  .workbench-dialog .modal-panel {
-    padding-top: calc(16px + env(safe-area-inset-top, 0px));
-    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  .library-page .workbench-body {
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   }
 
   .expanded-chart-modal .modal-panel {
@@ -38,7 +37,7 @@ label {
     padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
   }
 
-  .quick-search-modal .modal-panel {
+  .mentors-page .quick-search-list {
     padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   }
 

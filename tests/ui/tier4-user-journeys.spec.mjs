@@ -129,7 +129,7 @@ test('Tier4-02: 笔记本 1024px 速查多维筛选 -> 档案步进收藏 -> 候
 
   // Ctrl+K QuickSearch homophone & multi-filter
   await page.keyboard.press('Control+k')
-  const quick = page.getByRole('dialog', { name: '查看导师', exact: true })
+  const quick = page.getByRole('region', { name: '查看导师', exact: true })
   await expect(quick).toBeVisible()
   const searchBox = quick.getByRole('textbox', { name: '搜索导师姓名、方向或关键词' })
   await searchBox.fill('傅俊松')
@@ -151,11 +151,10 @@ test('Tier4-02: 笔记本 1024px 速查多维筛选 -> 档案步进收藏 -> 候
   expect(secondName).not.toBe(firstName)
   await dossier.getByRole('button', { name: '加入候选库', exact: true }).click()
   await dossier.getByRole('button', { name: '返回查看导师', exact: true }).click()
-  await page.keyboard.press('Escape')
 
   // Open Workbench, create list, set status & note
-  await page.getByRole('button', { name: '候选库 · 打开选导师工作台', exact: true }).click()
-  const lib = page.getByRole('dialog', { name: '候选库', exact: true })
+  await page.getByRole('button', { name: '候选库', exact: true }).click()
+  const lib = page.getByRole('region', { name: '候选库', exact: true })
   await expect(lib.locator('.mentor-tile')).toHaveCount(2)
   await lib.getByRole('button', { name: '新建清单', exact: true }).click()
   await lib.getByRole('textbox', { name: '清单名称', exact: true }).fill('冲刺名单')
@@ -169,7 +168,7 @@ test('Tier4-02: 笔记本 1024px 速查多维筛选 -> 档案步进收藏 -> 候
   await lib.getByRole('button', { name: '返回候选', exact: true }).click()
   await auditA11y(page, 't4-02-workbench-1024')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Agent 交互', exact: true }).click()
 
   // Workbench comparison snapshots & scenario compare + HTML export
   await request.put('/api/workbench/comparison', { data: { mentors: [{ name: firstName }, { name: secondName }] } })
@@ -197,8 +196,8 @@ test('Tier4-03: 手机端 390px/360px 速查 -> 档案追问 -> 抽屉重命名�
   await page.goto('/')
   await auditA11y(page, 't4-03-mobile-welcome')
 
-  await page.getByRole('button', { name: '查看导师 · 速查导师档案', exact: true }).click()
-  const quick = page.getByRole('dialog', { name: '查看导师', exact: true })
+  await page.getByRole('button', { name: '查看导师', exact: true }).click()
+  const quick = page.getByRole('region', { name: '查看导师', exact: true })
   await quick.getByRole('button', { name: '6G', exact: true }).click()
   await quick.locator('.quick-search-list .qs-item-main').first().click()
   const dossier = page.getByRole('dialog', { name: '导师档案', exact: true })
@@ -254,7 +253,7 @@ test('Tier4-04: CLI (bin/mentor.mjs) 与 Web UI 实时同步及管道/边界校�
   await expect(profileBtn).toContainText('368分')
   await expect(profileBtn).toContainText('读博深造')
   await expect(profileBtn).toContainText('能实习')
-  await expect(page.getByRole('button', { name: '候选库 · 打开选导师工作台', exact: true })).toContainText('1')
+  await expect(page.getByRole('button', { name: '候选库', exact: true })).toContainText('1')
 
   // CLI query | visualize stdin pipeline
   const qRes = await runCli([

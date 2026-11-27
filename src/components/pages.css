@@ -1,0 +1,79 @@
+/* Full parallel page layout for Agent / 查看导师 / 候选库 */
+
+.app-page {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-page[hidden] {
+  display: none !important;
+}
+
+.app-page-panel {
+  position: relative;
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  flex: 1;
+  min-height: 0;
+  padding: 20px 28px 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.page-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--ink);
+}
+
+.mentors-page .page-header {
+  margin-bottom: 10px;
+}
+
+.mentors-page .quick-search-list {
+  padding-bottom: 14px;
+}
+
+.mentors-page .qs-kbd-legend {
+  padding-bottom: 12px;
+}
+
+.library-page .workbench-body {
+  flex: 1;
+  min-height: 0;
+  padding-bottom: 28px;
+}
+
+@media (max-width: 760px) {
+  .app-page-panel {
+    padding: 12px 12px 0;
+  }
+
+  .page-header {
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+  }
+
+  .page-header h2 {
+    font-size: 18px;
+  }
+}

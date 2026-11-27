@@ -276,8 +276,8 @@ try {
   await page.getByRole('heading', { name: '选导师，先看清' }).waitFor()
 
   // Quick search -> open first result Dossier (light)
-  await page.getByRole('button', { name: '查看导师 · 速查导师档案', exact: true }).click()
-  const qs = page.getByRole('dialog', { name: '查看导师', exact: true })
+  await page.getByRole('button', { name: '查看导师', exact: true }).click()
+  const qs = page.getByRole('region', { name: '查看导师', exact: true })
   await qs.waitFor()
   await qs.getByRole('button', { name: '可以实习', exact: true }).click()
   await qs.getByRole('textbox', { name: '搜索导师姓名、方向或关键词' }).fill('付俊松')
@@ -287,9 +287,9 @@ try {
   await dossier.locator('.dossier-facts').waitFor()
   await captureAndSave(page, scratchPage, 'polaris-dossier.png', desktopSize)
 
-  // Close dossier + quick search
+  // Close dossier and return to Agent page
   await page.keyboard.press('Escape')
-  if (await qs.isVisible().catch(() => false)) await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Agent 交互', exact: true }).click()
 
   // Chat ranking + Duel
   await page.getByRole('textbox', { name: '向北极星提问' }).fill('把多个学院的老师放一起，来个你认为最好的导师的排名。只前30个最好的导师就够了。')
@@ -322,8 +322,8 @@ try {
   })
   await darkPage.goto(srv.url)
   await darkPage.getByRole('heading', { name: '选导师，先看清' }).waitFor()
-  await darkPage.getByRole('button', { name: '查看导师 · 速查导师档案', exact: true }).click()
-  const darkQs = darkPage.getByRole('dialog', { name: '查看导师', exact: true })
+  await darkPage.getByRole('button', { name: '查看导师', exact: true }).click()
+  const darkQs = darkPage.getByRole('region', { name: '查看导师', exact: true })
   await darkQs.waitFor()
   await darkQs.getByRole('textbox', { name: '搜索导师姓名、方向或关键词' }).fill('付俊松')
   await darkQs.locator('.quick-search-list .qs-item-main').first().click()
@@ -349,8 +349,8 @@ try {
   })
   await mobilePage.goto(srv.url)
   await mobilePage.getByRole('heading', { name: '选导师，先看清' }).waitFor()
-  await mobilePage.getByRole('button', { name: '查看导师 · 速查导师档案', exact: true }).click()
-  const mobileQs = mobilePage.getByRole('dialog', { name: '查看导师', exact: true })
+  await mobilePage.getByRole('button', { name: '查看导师', exact: true }).click()
+  const mobileQs = mobilePage.getByRole('region', { name: '查看导师', exact: true })
   await mobileQs.waitFor()
   await mobileQs.getByRole('button', { name: '可以实习', exact: true }).click()
   await mobileQs.locator('.quick-search-list .qs-item').first().waitFor()

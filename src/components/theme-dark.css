@@ -253,13 +253,11 @@
 
 /* ---------- Modals, Settings, Usage, Sources, Shortcuts ---------- */
 [data-theme="dark"] .modal-backdrop,
-[data-theme="dark"] .sidebar-backdrop,
-[data-theme="dark"] .workbench-dialog.modal-backdrop {
+[data-theme="dark"] .sidebar-backdrop {
   background: rgba(2, 6, 23, 0.68);
 }
 
 [data-theme="dark"] .modal-panel,
-[data-theme="dark"] .workbench-dialog .modal-panel,
 [data-theme="dark"] .sources-modal .modal-header {
   background: var(--surface);
   border-color: var(--line);

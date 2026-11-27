@@ -37,7 +37,7 @@ test('快捷键弹窗支持 ? 与 Ctrl+/ 打开、不拦截输入框内的 ? 且
   await page.keyboard.press('?')
   const dialog = page.getByRole('dialog', { name: '键盘快捷键', exact: true })
   await expect(dialog).toBeVisible()
-  await expect(dialog).toContainText('打开或关闭查看导师速查')
+  await expect(dialog).toContainText('切换到查看导师并聚焦搜索')
   await auditA11y(page, 'shortcut-help-dialog')
 
   await page.keyboard.press('Escape')
@@ -58,40 +58,41 @@ test('快捷键弹窗支持 ? 与 Ctrl+/ 打开、不拦截输入框内的 ? 且
   expect(errors).toEqual([])
 })
 
-test('速查筛选条件在当前会话内关闭重开后保持，清空后同步清除，390px 关闭按钮不越界', async ({ page }) => {
+test('速查筛选条件在当前会话内切换离开再切回后保持，清空后同步清除，390px 顶部工具不越界', async ({ page }) => {
   const errors = []
   page.on('pageerror', e => errors.push(e.message))
+  const nav = page.getByRole('navigation', { name: '核心功能' })
 
   await page.goto('/')
   await page.keyboard.press('Control+k')
-  const quick = page.getByRole('dialog', { name: '查看导师', exact: true })
+  const quick = page.getByRole('region', { name: '查看导师', exact: true })
   await expect(quick).toBeVisible()
 
   const intern = quick.getByRole('button', { name: '可以实习', exact: true })
   await intern.click()
   await expect(intern).toHaveAttribute('aria-pressed', 'true')
-  await page.keyboard.press('Escape')
-  await expect(quick).toHaveCount(0)
+  await nav.getByRole('button', { name: 'Agent 交互', exact: true }).click()
+  await expect(quick).toBeHidden()
 
-  // Reopen via Ctrl+K: filter persists within session
+  // Switch back via Ctrl+K: filter persists within session
   await page.keyboard.press('Control+k')
   await expect(quick).toBeVisible()
   await expect(quick.getByRole('button', { name: '可以实习', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(quick.locator('.qs-active-bar')).toContainText('已选 1 项筛选')
 
-  // Clear filters and verify cleared state persists on reopen
+  // Clear filters and verify cleared state persists across switch
   await quick.getByRole('button', { name: '清空筛选', exact: true }).click()
   await expect(quick.getByRole('button', { name: '可以实习', exact: true })).toHaveAttribute('aria-pressed', 'false')
-  await page.keyboard.press('Escape')
+  await nav.getByRole('button', { name: 'Agent 交互', exact: true }).click()
   await page.keyboard.press('Control+k')
   await expect(quick.getByRole('button', { name: '可以实习', exact: true })).toHaveAttribute('aria-pressed', 'false')
   await expect(quick.locator('.qs-active-bar')).toBeHidden()
 
-  // Mobile 390px close button fully within viewport without clipping
+  // Mobile 390px quick search header action fully within viewport without clipping
   await page.setViewportSize({ width: 390, height: 844 })
-  const closeBtn = quick.getByRole('button', { name: '关闭面板', exact: true })
-  await expect(closeBtn).toBeVisible()
-  const box = await closeBtn.boundingBox()
+  const libBtn = quick.getByRole('button', { name: /候选库/ })
+  await expect(libBtn).toBeVisible()
+  const box = await libBtn.boundingBox()
   expect(box).toBeTruthy()
   expect(box.x).toBeGreaterThanOrEqual(0)
   expect(box.y).toBeGreaterThanOrEqual(0)
@@ -128,8 +129,9 @@ test('档案复制邮箱触发全局提示，侧栏搜索清空按钮可清空�
   await expect(clearSearch).toHaveCount(0)
 
   // Copy email in Dossier triggers global .notice toast
-  await page.getByRole('button', { name: '查看导师 · 速查导师档案', exact: true }).click()
-  const quick = page.getByRole('dialog', { name: '查看导师', exact: true })
+  const nav = page.getByRole('navigation', { name: '核心功能' })
+  await nav.getByRole('button', { name: '查看导师', exact: true }).click()
+  const quick = page.getByRole('region', { name: '查看导师', exact: true })
   await quick.getByRole('textbox', { name: '搜索导师姓名、方向或关键词' }).fill('付俊松')
   await quick.locator('.quick-search-list .qs-item-main').first().click()
 
@@ -144,7 +146,7 @@ test('档案复制邮箱触发全局提示，侧栏搜索清空按钮可清空�
   expect(await page.evaluate(() => window.__copied)).toEqual(['fujs@bupt.edu.cn'])
   await auditA11y(page, 'dossier-with-toast')
   await page.keyboard.press('Escape')
-  await page.keyboard.press('Escape')
+  await nav.getByRole('button', { name: 'Agent 交互', exact: true }).click()
 
   // Toast stays cleanly above the composer (no bottom overlap)
   const [noticeBox, composerBox] = await Promise.all([

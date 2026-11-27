@@ -72,8 +72,9 @@ test('全场景导出（欢迎页预设、速查筛选、档案、候选库、�
   await expect(topExportBtn).toBeFocused()
 
   // 2. QuickSearch filtered export (.xlsx + .pdf) and Dossier export (.docx)
-  await page.getByRole('button', { name: /查看导师/ }).first().click()
-  const qs = page.getByRole('dialog', { name: '查看导师', exact: true })
+  const nav = page.getByRole('navigation', { name: '核心功能' })
+  await nav.getByRole('button', { name: '查看导师', exact: true }).click()
+  const qs = page.getByRole('region', { name: '查看导师', exact: true })
   await expect(qs).toBeVisible()
   await qs.getByRole('textbox', { name: '搜索导师姓名、方向或关键词', exact: true }).fill('付俊松')
   await expect(qs.locator('[data-qs-item]')).toHaveCount(1)
@@ -95,16 +96,13 @@ test('全场景导出（欢迎页预设、速查筛选、档案、候选库、�
   expect(dossierDocx.filename).toMatch(/\.docx$/i)
   expect(dossierDocx.buffer.subarray(0, 4).toString('hex')).toBe('504b0304')
 
-  // Bookmark 付俊松 from Dossier then close Dossier and QuickSearch
+  // Bookmark 付俊松 from Dossier then close Dossier and switch to Library page
   await dossier.getByRole('button', { name: '加入候选库', exact: true }).click()
   await dossier.getByRole('button', { name: '关闭面板', exact: true }).click()
-  if (await qs.isVisible().catch(() => false)) {
-    await qs.getByRole('button', { name: '关闭面板', exact: true }).click()
-  }
 
   // 3. Workbench shortlist Excel export
-  await page.getByRole('button', { name: '候选库 · 打开选导师工作台', exact: true }).click()
-  const lib = page.getByRole('dialog', { name: '候选库', exact: true })
+  await nav.getByRole('button', { name: '候选库', exact: true }).click()
+  const lib = page.getByRole('region', { name: '候选库', exact: true })
   await expect(lib).toBeVisible()
   await lib.getByRole('button', { name: '多格式导出候选列表', exact: true }).click()
   const libXlsx = await captureDownloadBytes(page, () =>
@@ -112,7 +110,7 @@ test('全场景导出（欢迎页预设、速查筛选、档案、候选库、�
   )
   expect(libXlsx.filename).toMatch(/\.xlsx$/i)
   expect(libXlsx.buffer.subarray(0, 4).toString('hex')).toBe('504b0304')
-  await lib.getByRole('button', { name: '关闭面板', exact: true }).click()
+  await nav.getByRole('button', { name: 'Agent 交互', exact: true }).click()
 
   // 4. Chat + Chart artifact + Message export
   const composer = page.getByRole('textbox', { name: '向北极星提问' })
