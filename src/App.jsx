@@ -17,6 +17,7 @@ import './components/export.css'
 import {usePolaris} from './insights.jsx'
 import {MentorDossier} from './components/MentorInsight.jsx'
 import './components/polaris.css'
+import './components/theme-dark.css'
 import {useWorkspace} from './workspace.jsx'
 import {useToast} from './toast.jsx'
 const WorkspaceLayer=lazy(()=>import('./components/Workbench.jsx'))

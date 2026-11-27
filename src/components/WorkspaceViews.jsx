@@ -1,13 +1,15 @@
 import {APP_NAME,APP_SLOGAN,APP_TAGLINE} from '../../lib/brand.js'
 import React, { forwardRef, memo, useEffect, useState } from 'react'
-import { ArrowDown, ArrowRight, ArrowUp, Bookmark, ChevronRight, Coins, Keyboard, LoaderCircle, MessageSquare, Pencil, Plus, Search, Settings2, SlidersHorizontal, Square, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUp, Bookmark, ChevronRight, Coins, Keyboard, LoaderCircle, MessageSquare, Moon, Pencil, Plus, Search, Settings2, SlidersHorizontal, Square, Sun, Trash2, X } from 'lucide-react'
 import { compactNumber, effortLabel } from '../presentation.js'
 import { tokenNumber } from '../api.js'
+import { useTheme } from '../theme-hook.jsx'
 import { AgentMark } from './Message.jsx'
 import SidebarPane from './SidebarPane.jsx'
 import {ProfileBar} from './ProfileBar.jsx'
 
 export const Sidebar = memo(function Sidebar({ chats, chatId, usage, configured, open, collapsed, isMac = false, onCollapse, onClose, onNew, onSelect, onSearch, onRemove, onRename, onTrash, onSettings, onUsage, onShortcuts, onOpenMentors, onWorkspace }) {
+  const { resolved, toggleQuickTheme } = useTheme()
   const [search,setSearch] = useState('')
   const [found,setFound] = useState({query:'',items:[]}),[searchError,setSearchError] = useState('')
   useEffect(()=>{
@@ -33,7 +35,7 @@ export const Sidebar = memo(function Sidebar({ chats, chatId, usage, configured,
       {onOpenMentors&&<button className="sidebar-workspace" onClick={onOpenMentors}><Search size={15}/><span>查看导师</span><ChevronRight size={14}/></button>}
       <button className="sidebar-workspace" onClick={onWorkspace}><Bookmark size={15}/><span>候选库</span><ChevronRight size={14}/></button>
       <button className="usage-summary" onClick={onUsage} aria-label="Token 用量"><Coins size={16}/><span>Token 用量</span><strong>{compactNumber(usage?.totalTokens || 0)}</strong></button>
-      <div className="sidebar-settings-row"><button className="sidebar-setting" onClick={onSettings} disabled={!configured}><Settings2 size={16}/><span>设置</span><ChevronRight size={14}/></button>{onShortcuts&&<button className="icon-button" aria-label="快捷键" title={`快捷键（${isMac?'⌘/':'Ctrl+/'} 或 ?）`} onClick={onShortcuts}><Keyboard size={16}/></button>}<button className="icon-button" aria-label="回收站" title="回收站" onClick={onTrash}><Trash2 size={16}/></button></div>
+      <div className="sidebar-settings-row"><button className="sidebar-setting" onClick={onSettings} disabled={!configured}><Settings2 size={16}/><span>设置</span><ChevronRight size={14}/></button><button className="icon-button" aria-label="切换深色模式" aria-pressed={resolved === 'dark'} title={resolved === 'dark' ? '切换为浅色模式' : '切换为深色模式'} onClick={toggleQuickTheme}>{resolved === 'dark' ? <Sun size={16}/> : <Moon size={16}/>}</button>{onShortcuts&&<button className="icon-button" aria-label="快捷键" title={`快捷键（${isMac?'⌘/':'Ctrl+/'} 或 ?）`} onClick={onShortcuts}><Keyboard size={16}/></button>}<button className="icon-button" aria-label="回收站" title="回收站" onClick={onTrash}><Trash2 size={16}/></button></div>
     </div>
   </aside></SidebarPane>
 })

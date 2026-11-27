@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, ExternalLink, Eye, EyeOff, KeyRound, Keyboard, Link2, LoaderCircle, Lock, Search, ShieldAlert, SlidersHorizontal } from 'lucide-react'
+import { Check, ChevronDown, ExternalLink, Eye, EyeOff, KeyRound, Keyboard, Link2, LoaderCircle, Lock, Monitor, Moon, Palette, Search, ShieldAlert, SlidersHorizontal, Sun } from 'lucide-react'
 import { api, modelLabel, tokenNumber } from '../api.js'
 import { compactNumber, effortLabel } from '../presentation.js'
+import { useTheme } from '../theme-hook.jsx'
 import Dialog from './Dialog.jsx'
 import DataTable from './DataTable.jsx'
 import { sourceNumber } from '../../lib/presentation.js'
@@ -166,9 +167,55 @@ function ExecutionForm({ config, onSaved }) {
   </form>
 }
 
+const THEME_OPTIONS = [
+  { value: 'system', label: '跟随系统', desc: '自动随操作系统浅色/深色外观切换', Icon: Monitor },
+  { value: 'light', label: '浅色', desc: '明亮纸感界面，适合白天或强光环境', Icon: Sun },
+  { value: 'dark', label: '深色', desc: '深海夜航配色，降低夜间与暗光屏幕眩光', Icon: Moon },
+]
+
+function AppearanceForm() {
+  const { preference, resolved, setPreference } = useTheme()
+  return (
+    <div className="settings-form appearance-form">
+      <div className="settings-section-heading">
+        <div>
+          <h3 id="theme-group-label">主题</h3>
+          <p className="appearance-intro">立即生效并自动保存至本机浏览器偏好。</p>
+        </div>
+        <span className="connection-state configured">当前：{resolved === 'dark' ? '深色' : '浅色'}</span>
+      </div>
+      <div className="theme-radio-group" role="radiogroup" aria-labelledby="theme-group-label">
+        {THEME_OPTIONS.map(({ value, label, desc, Icon }) => {
+          const id = `theme-pref-${value}`
+          const descId = `theme-desc-${value}`
+          const checked = preference === value
+          return (
+            <div className={`theme-option${checked ? ' is-selected' : ''}`} key={value}>
+              <input
+                id={id}
+                type="radio"
+                name="polaris-theme"
+                value={value}
+                checked={checked}
+                aria-describedby={descId}
+                onChange={() => setPreference(value)}
+              />
+              <label htmlFor={id} className="theme-option-label">
+                <Icon size={16} aria-hidden="true" />
+                <span>{label}</span>
+              </label>
+              <small id={descId} className="theme-option-desc">{desc}</small>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export function Settings({ config, onSaved, onClose, initialTab = 'connection' }) {
   const [tab, setTab] = useState(initialTab)
-  return <Dialog title="设置" className="settings-modal" onClose={onClose}><div className="settings-layout"><nav className="settings-tabs" aria-label="设置分类"><button className={tab === 'connection' ? 'active' : ''} aria-current={tab === 'connection' ? 'page' : undefined} onClick={() => setTab('connection')}><Link2 size={15}/>模型连接</button><button className={tab === 'execution' ? 'active' : ''} aria-current={tab === 'execution' ? 'page' : undefined} onClick={() => setTab('execution')}><SlidersHorizontal size={15}/>执行参数</button></nav><div className="settings-content">{tab === 'connection' ? <ConnectionForm config={config} onSaved={onSaved}/> : <ExecutionForm config={config} onSaved={onSaved}/>}</div></div></Dialog>
+  return <Dialog title="设置" className="settings-modal" onClose={onClose}><div className="settings-layout"><nav className="settings-tabs" aria-label="设置分类"><button className={tab === 'connection' ? 'active' : ''} aria-current={tab === 'connection' ? 'page' : undefined} onClick={() => setTab('connection')}><Link2 size={15}/>模型连接</button><button className={tab === 'execution' ? 'active' : ''} aria-current={tab === 'execution' ? 'page' : undefined} onClick={() => setTab('execution')}><SlidersHorizontal size={15}/>执行参数</button><button className={tab === 'appearance' ? 'active' : ''} aria-current={tab === 'appearance' ? 'page' : undefined} onClick={() => setTab('appearance')}><Palette size={15}/>外观</button></nav><div className="settings-content">{tab === 'connection' ? <ConnectionForm config={config} onSaved={onSaved}/> : tab === 'execution' ? <ExecutionForm config={config} onSaved={onSaved}/> : <AppearanceForm/>}</div></div></Dialog>
 }
 
 export function Usage({ usage, onClose }) {

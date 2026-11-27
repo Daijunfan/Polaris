@@ -43,7 +43,7 @@ export function Radar({series,size=216,showLabels=true,active,onAxis}){
       const color=item.color||radarColors[seriesIndex%radarColors.length]
       const values=fingerprintAxes.map(axis=>item.fingerprint[axis.key]?.value??0)
       const points=values.map((value,index)=>point(index,Math.max(value,.15)).join(',')).join(' ')
-      return <g key={seriesIndex} className="radar-series"><polygon points={points} fill={color} fillOpacity={series.length>1?.12:.18} stroke={color} strokeWidth="2" strokeLinejoin="round"/>{values.map((value,index)=>value?<circle key={index} cx={point(index,value)[0]} cy={point(index,value)[1]} r="3.2" fill="#fff" stroke={color} strokeWidth="2"/>:null)}</g>
+      return <g key={seriesIndex} className="radar-series"><polygon points={points} fill={color} fillOpacity={series.length>1?.12:.18} stroke={color} strokeWidth="2" strokeLinejoin="round"/>{values.map((value,index)=>value?<circle key={index} cx={point(index,value)[0]} cy={point(index,value)[1]} r="3.2" style={{ fill: 'var(--surface, #fff)' }} stroke={color} strokeWidth="2"/>:null)}</g>
     })}
   </svg>
 }
