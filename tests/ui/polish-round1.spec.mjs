@@ -88,15 +88,19 @@ test('速查筛选条件在当前会话内切换离开再切回后保持，清�
   await expect(quick.getByRole('button', { name: '可以实习', exact: true })).toHaveAttribute('aria-pressed', 'false')
   await expect(quick.locator('.qs-active-bar')).toBeHidden()
 
-  // Mobile 390px quick search header action fully within viewport without clipping
+  // Mobile 390px quick search header action & topbar nav button fully within viewport without clipping
   await page.setViewportSize({ width: 390, height: 844 })
-  const libBtn = quick.getByRole('button', { name: /候选库/ })
-  await expect(libBtn).toBeVisible()
-  const box = await libBtn.boundingBox()
-  expect(box).toBeTruthy()
-  expect(box.x).toBeGreaterThanOrEqual(0)
-  expect(box.y).toBeGreaterThanOrEqual(0)
-  expect(box.x + box.width).toBeLessThanOrEqual(390)
+  for (const btn of [
+    quick.getByRole('button', { name: '导出当前筛选导师', exact: true }),
+    nav.getByRole('button', { name: '候选库', exact: true }),
+  ]) {
+    await expect(btn).toBeVisible()
+    const box = await btn.boundingBox()
+    expect(box).toBeTruthy()
+    expect(box.x).toBeGreaterThanOrEqual(0)
+    expect(box.y).toBeGreaterThanOrEqual(0)
+    expect(box.x + box.width).toBeLessThanOrEqual(390)
+  }
 
   expect(errors).toEqual([])
 })

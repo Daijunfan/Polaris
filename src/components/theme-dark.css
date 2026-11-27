@@ -359,8 +359,7 @@
 }
 
 /* ---------- Toasts, Banners, Errors & Shimmer ---------- */
-[data-theme="dark"] .notice,
-[data-theme="dark"] .workspace-toast {
+[data-theme="dark"] .notice {
   background: var(--surface);
   border-color: var(--line-strong);
   color: var(--ink);
@@ -803,10 +802,6 @@
 
 [data-theme="dark"] .quick-search-meta {
   color: var(--muted);
-}
-
-[data-theme="dark"] .qs-lib-btn:hover {
-  background: #1f3966;
 }
 
 [data-theme="dark"] .quick-search-box,

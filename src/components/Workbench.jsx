@@ -1,5 +1,5 @@
 import React,{useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react'
-import {ArrowLeft,Bookmark,Check,ChevronRight,Download,ExternalLink,FolderPlus,LayoutGrid,Plus,Search,Star,Table2,Trash2,X} from 'lucide-react'
+import {ArrowLeft,Bookmark,ChevronRight,Download,ExternalLink,FolderPlus,LayoutGrid,Plus,Search,Star,Table2,Trash2,X} from 'lucide-react'
 import DataTable from './DataTable.jsx'
 import {FlagChips} from './MentorInsight.jsx'
 import {usePolaris} from '../insights.jsx'
@@ -67,11 +67,6 @@ function MentorDetail({person,onBack}){
     {loading?<WorkbenchDetailSkeleton/>:detail&&<div className="detail-layout"><aside className="detail-notes"><h4>我的选择记录</h4>{saved?<><label htmlFor="mentor-contact-status">联系进度</label><select id="mentor-contact-status" value={saved.status} disabled={w.pending} onChange={event=>w.mutate('/workbench/items/'+person.key,'PATCH',{status:event.target.value}).catch(swallow)}>{Object.entries(statusNames).map(([key,label])=><option value={key} key={key}>{label}</option>)}</select><label htmlFor="mentor-private-note">导师备注</label><textarea id="mentor-private-note" value={note} maxLength={2000} placeholder="记录你的方向、联系进展和需要比较的问题" onChange={event=>{const text=event.target.value;draft.current={note:text,dirty:true};sessionStorage.setItem(draftKey,text);setNote(text);setNoteStatus('editing')}} onBlur={saveNote}/><div className="detail-note-actions"><button className="primary-button" disabled={w.pending||!draft.current.dirty} onClick={saveNote}>{noteStatus==='error'?'重试保存':'保存备注'}</button><small role="status">{({saved:'已保存 · 自动保存',editing:'等待保存',saving:'保存中…',error:'尚未保存'})[noteStatus]}</small></div></>:<p>收藏这位导师后，可记录联系进度与个人备注。</p>}</aside><div className="detail-facts">{w.state.fieldOptions.filter(field=>detail[field.key]!=null&&detail[field.key]!=='').map(field=>{const value=['doctoral_evidence','profile_evidence','admissions'].includes(field.key)?formatDisciplineText(display(detail[field.key],field)):field.key==='academic_summary'?formatAcademicSummary(detail[field.key],person.professional_title)||display(detail[field.key],field):display(detail[field.key],field);return <section key={field.key}><h4>{field.label}</h4><p>{value}</p></section>})}{person.student_count!=null&&<small>{w.state.rosterYear}年名册 · 全专业</small>}<section><h4>资料来源</h4><div className="detail-sources">{detail.sources.map(source=>source.url?<a href={source.url} target="_blank" rel="noopener noreferrer" key={source.id}>{source.title}<ExternalLink size={12}/></a>:<span key={source.id}>{source.title}{source.year?' · '+source.year:''}</span>)}</div></section></div></div>}
   </div>
 }
-function WorkspaceNotice({floating=false}){
-  const w=useWorkspace(),text=w.message||(!w.view?w.error:'')
-  if(!text)return null
-  return <div className={'workspace-toast'+(floating?' floating':'')} role="status"><Check size={14}/>{text}{w.message==='已移出候选'&&w.state?.removedKey&&<button onClick={()=>w.mutate('/workbench/items/'+w.state.removedKey+'/restore','POST',{}).then(()=>w.setMessage('已恢复候选及备注')).catch(swallow)}>撤销</button>}<button aria-label="关闭操作提示" onClick={()=>{w.setMessage('');w.setError('')}}><X size={13}/></button></div>
-}
 export default function WorkspaceLayer({active=true,onAsk,onOpenMentors,busy=false}){
   const w=useWorkspace(),[list,setList]=useState('all'),[query,setQuery]=useState(''),[college,setCollege]=useState(''),[status,setStatus]=useState(''),[sort,setSort]=useState('recent'),[discover,setDiscover]=useState(false),[directory,setDirectory]=useState({rows:[],total:0}),[finding,setFinding]=useState(false),[displayMode,setDisplayMode]=useState('cards'),[detail,setDetail]=useState(null),[name,setName]=useState(''),[naming,setNaming]=useState(null),[dirPage,setDirPage]=useState(0),[visibleCount,setVisibleCount]=useState(24),[analysis,setAnalysis]=useState('ratings'),[rules,setRules]=useState([]),[matching,setMatching]=useState(null),[linking,setLinking]=useState(false),[chartCollege,setChartCollege]=useState('')
   const body=useRef(null),positions=useRef(new Map()),scrollKey='library:'+(detail?.key||'')
@@ -103,7 +98,6 @@ export default function WorkspaceLayer({active=true,onAsk,onOpenMentors,busy=fal
   const distinctSavedColleges=new Set(all.flatMap(row=>(row.college||'').split(/[、,，]+/).map(s=>s.replace(/[（(].*$/,'').trim()).filter(Boolean))).size
   return <section className="app-page-panel library-page" aria-labelledby="library-page-title"><header className="page-header"><h2 id="library-page-title">候选库</h2></header><div className="workbench-body" ref={body} onScroll={event=>positions.current.set(scrollKey,event.currentTarget.scrollTop)}>
     {<>
-      <div className="workspace-heading"><h3>我的导师候选</h3></div>
       {w.error&&<div className="workspace-error" role="alert">{w.error}<button aria-label="关闭工作台提示" onClick={()=>w.setError('')}><X size={14}/></button></div>}
       {naming&&<form className="workspace-name-form" onSubmit={event=>{event.preventDefault();saveName()}}><label htmlFor="workspace-object-name">{naming==='lists'?'清单名称':'视图名称'}</label><input id="workspace-object-name" autoFocus value={name} onChange={event=>setName(event.target.value)} placeholder="输入名称" maxLength={80}/><button className="primary-button" disabled={!name.trim()||w.pending}>保存</button><button type="button" className="secondary-button" onClick={()=>setNaming(null)}>取消</button></form>}
       {(detail?<MentorDetail person={detail} onBack={()=>setDetail(null)}/>:<>
@@ -118,6 +112,5 @@ export default function WorkspaceLayer({active=true,onAsk,onOpenMentors,busy=fal
         </div></div>
       </>)}
     </>}
-    <WorkspaceNotice/>
   </div></section>
 }

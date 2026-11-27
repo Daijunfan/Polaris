@@ -83,7 +83,7 @@ test('工作台目录分页、收藏撤销、公式注入防卫 CSV 导出与 HT
   // Remove item & undo via toast (restores item and note)
   await lib.getByRole('button', { name: '取消收藏 付俊松', exact: true }).click()
   await expect(lib.locator('.workspace-empty')).toContainText('候选库为空')
-  const toast = lib.locator('.workspace-toast[role="status"]')
+  const toast = page.getByRole('region', { name: '通知提示', exact: true })
   await expect(toast).toContainText('已移出候选')
   await toast.getByRole('button', { name: '撤销', exact: true }).click()
   await expect(toast).toContainText('已恢复候选及备注')

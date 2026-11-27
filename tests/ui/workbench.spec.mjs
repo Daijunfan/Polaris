@@ -10,7 +10,7 @@ test.beforeEach(async({request})=>{
 async function open(page){
   await page.goto('/')
   await page.getByRole('navigation',{name:'核心功能'}).getByRole('button',{name:'候选库',exact:true}).click()
-  await expect(page.getByRole('heading',{name:'我的导师候选',exact:true})).toBeVisible()
+  await expect(page.getByRole('region',{name:'候选库',exact:true}).getByRole('heading',{name:'候选库',level:2})).toBeVisible()
 }
 async function note(page){
   await page.getByRole('button',{name:'南国顺',exact:true}).click()

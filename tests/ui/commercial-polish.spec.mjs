@@ -18,7 +18,7 @@ const audit=async page=>{
 async function openWorkbench(page){
   await page.goto('/')
   await page.getByRole('button',{name:'候选库',exact:true}).click()
-  await expect(page.getByRole('heading',{name:'我的导师候选',exact:true})).toBeVisible()
+  await expect(page.getByRole('region',{name:'候选库',exact:true}).getByRole('heading',{name:'候选库',level:2})).toBeVisible()
 }
 
 test('全校14院官网导师发现与官网学术档案完整展示且通过无障碍检查',async({page})=>{
@@ -74,7 +74,7 @@ test('跨学院同名导师候选与14院画像多选不截断',async({page,requ
   await page.getByRole('button',{name:'候选库',exact:true}).click()
   const library=page.getByRole('region',{name:'候选库',exact:true})
   await expect(library).toBeVisible()
-  await expect(page.getByRole('heading',{name:'我的导师候选',exact:true})).toBeVisible()
+  await expect(page.getByRole('region',{name:'候选库',exact:true}).getByRole('heading',{name:'候选库',level:2})).toBeVisible()
 
   const tiles=library.locator('.mentor-tile').filter({hasText:'刘勇'})
   await expect(tiles).toHaveCount(directory.rows.length)

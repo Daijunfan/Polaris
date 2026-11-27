@@ -58,7 +58,8 @@ const Trash=dialogsChunk.pick('Trash')
 const Usage=dialogsChunk.pick('Usage')
 const RenameConversation=dialogsChunk.pick('RenameConversation')
 const VaultUnlockDialog=dialogsChunk.pick('VaultUnlockDialog')
-const WorkspaceLayer=lazy(()=>import('./components/Workbench.jsx'))
+const loadWorkbench=()=>import('./components/Workbench.jsx')
+const WorkspaceLayer=lazy(loadWorkbench)
 
 export default function App() {
   const workspace=useWorkspace(),polaris=usePolaris(),toast=useToast()
@@ -137,6 +138,7 @@ export default function App() {
       loadMessage().catch(() => {})
       loadDialogs().catch(() => {})
       loadQuickSearch().catch(() => {})
+      loadWorkbench().catch(() => {})
       loadInsight().catch(() => {})
     }
     if (typeof window.requestIdleCallback === 'function') {
@@ -575,7 +577,7 @@ export default function App() {
   const compareCount = workspace.state?.comparison?.length || 0
   const mentorTotalCount = Object.keys(polaris.insights || {}).length
   const openMentors = useCallback(() => { loadQuickSearch().catch(() => {}); polaris.dismissMentorAll(); closeSidebar(); setModal(null); navigate('mentors') }, [closeSidebar, polaris, navigate])
-  const openLibrary = useCallback(() => { polaris.dismissMentorAll(); closeSidebar(); setModal(null); navigate('library') }, [closeSidebar, polaris, navigate])
+  const openLibrary = useCallback(() => { loadWorkbench().catch(() => {}); polaris.dismissMentorAll(); closeSidebar(); setModal(null); navigate('library') }, [closeSidebar, polaris, navigate])
   const focusAgent = useCallback(() => { polaris.dismissMentorAll(); closeSidebar(); setModal(null); navigate('agent'); requestAnimationFrame(() => textarea.current?.focus()) }, [closeSidebar, polaris, navigate])
   const showChatExport = page === 'agent' && !isWelcome
   useEffect(() => {
@@ -603,7 +605,7 @@ export default function App() {
       {visitedPages.has('mentors') && (
         <div className="app-page" hidden={page !== 'mentors'}>
           <Suspense fallback={<section className="app-page-panel mentors-page" aria-labelledby="mentors-page-loading"><header className="page-header"><h2 id="mentors-page-loading">查看导师</h2></header><QuickSearchSkeleton/></section>}>
-            <QuickSearch active={page === 'mentors'} focusSignal={mentorsFocus} onAsk={send} onOpenLibrary={openLibrary} busy={busy}/>
+            <QuickSearch active={page === 'mentors'} focusSignal={mentorsFocus} onAsk={send} busy={busy}/>
           </Suspense>
         </div>
       )}

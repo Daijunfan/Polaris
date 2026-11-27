@@ -6,9 +6,8 @@ const Context=createContext(null)
 export const useWorkspace=()=>useContext(Context)
 export function WorkspaceProvider({children}){
   const toast=useToast()
-  const [state,setState]=useState(null),[pending,setPending]=useState(0),[error,setError]=useState(''),[view,setView]=useState(null),[message,setMessageState]=useState('')
-  const queue=useRef(Promise.resolve()),current=useRef(null),mutationEpoch=useRef(0),activeMutations=useRef(0),needsRefresh=useRef(false),viewRef=useRef(view)
-  viewRef.current=view
+  const [state,setState]=useState(null),[pending,setPending]=useState(0),[error,setError]=useState(''),[view,setView]=useState(null)
+  const queue=useRef(Promise.resolve()),current=useRef(null),mutationEpoch=useRef(0),activeMutations=useRef(0),needsRefresh=useRef(false)
   const accept=useCallback(next=>{current.current=next;setState(next)},[])
   const refresh=useCallback(()=>{
     if(activeMutations.current){needsRefresh.current=true;return Promise.resolve()}
@@ -16,14 +15,12 @@ export function WorkspaceProvider({children}){
     return api('/workbench').then(next=>{if(epoch===mutationEpoch.current&&!activeMutations.current)accept(next);else needsRefresh.current=true}).catch(e=>setError(e.message))
   },[accept])
   useEffect(()=>{refresh()},[refresh])
-  useEffect(()=>{if(!message)return;const timer=setTimeout(()=>setMessageState(''),3000);return()=>clearTimeout(timer)},[message])
   const setMessage=useCallback(text=>{
-    if(!text){setMessageState('');return}
-    if(viewRef.current)setMessageState(text)
-    else toast.success(text)
+    if(!text)return
+    toast.success(text)
   },[toast])
-  const open=useCallback((next='library')=>{setError('');setMessageState('');setView(next)},[])
-  const fail=useCallback(e=>{if(viewRef.current)setError(e.message);else toast.error(e.message)},[toast])
+  const open=useCallback((next='library')=>{setError('');setView(next)},[])
+  const fail=useCallback(e=>{toast.error(e.message)},[toast])
   const mutate=useCallback((path,method='POST',body)=>{
     mutationEpoch.current++;activeMutations.current++
     setPending(value=>value+1)
@@ -39,8 +36,7 @@ export function WorkspaceProvider({children}){
     removed=Boolean(saved)
     return saved?{path:'/workbench/items/'+saved.key,method:'DELETE'}:{path:'/workbench/items',body:{mentors:[person]}}
   }).then(next=>{
-    if(viewRef.current){setMessageState(removed?'已移出候选':'已收藏'+(person.name||person.mentor_name))}
-    else if(removed&&next?.removedKey){
+    if(removed&&next?.removedKey){
       toast.info('已移出候选',{actionLabel:'撤销',durationMs:6000,onAction:()=>mutate('/workbench/items/'+next.removedKey+'/restore','POST',{}).then(()=>toast.success('已恢复候选及备注')).catch(()=>{})})
     }else{
       toast.success(removed?'已移出候选':'已收藏'+(person.name||person.mentor_name))
@@ -59,6 +55,6 @@ export function WorkspaceProvider({children}){
       const blob=await response.blob();downloadFile((scope==='library'?'导师候选库':snapshot?current.current?.snapshots.find(item=>item.id===snapshot)?.name||'导师对比报告':'导师对比报告').replace(/[\\/:*?"<>|]/g,'_')+'.'+format,blob,response.headers.get('content-type')||blob.type);setMessage('报告已下载')
     }catch(e){fail(e)}
   },[fail,setMessage])
-  const value={state,pending:Boolean(pending),error,message,view,open,close:()=>{setMessageState('');setView(null)},setView,setError,setMessage,refresh,mutate,saveMentor,addCompare,exportReport,fail}
+  const value={state,pending:Boolean(pending),error,view,open,close:()=>setView(null),setView,setError,setMessage,refresh,mutate,saveMentor,addCompare,exportReport,fail}
   return <Context.Provider value={value}>{children}</Context.Provider>
 }

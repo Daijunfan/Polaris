@@ -13,7 +13,7 @@ import {QuickSearchSkeleton} from './Skeleton.jsx'
 const PRIORITY_COLLEGES=['网络空间安全学院','计算机学院','人工智能学院','软件学院']
 const HOT_FILTER_IDS=['internship_ok','no_clock','no_paper','doctoral','dir_llm','dir_6g']
 
-export default function QuickSearch({active=true,focusSignal=0,onAsk,onOpenLibrary,busy=false}){
+export default function QuickSearch({active=true,focusSignal=0,onAsk,busy=false}){
   const polaris=usePolaris(),w=useWorkspace()
   const sessionInit=useMemo(()=>loadQuickSearchSessionFilters(),[])
   const init=sessionInit||{}
@@ -153,7 +153,6 @@ export default function QuickSearch({active=true,focusSignal=0,onAsk,onOpenLibra
     }
   }
 
-  const savedCount=w?.state?.items?.length||0
   const headerActions=<div className="qs-header-tools">
     <span className="quick-search-meta">{hasAnyCriteria?`显示 ${results.length} / 共 ${totalMatches} 位匹配`:`全校 ${allMentors.length} 位导师`}</span>
     <ExportMenu
@@ -172,9 +171,6 @@ export default function QuickSearch({active=true,focusSignal=0,onAsk,onOpenLibra
       onSuccess={({ filename }) => w?.setMessage?.(`已导出 ${filename}`)}
       onError={err => w?.fail?.(err)}
     />
-    {onOpenLibrary&&<button type="button" className="qs-lib-btn" onClick={()=>onOpenLibrary()}>
-      <Bookmark size={12} aria-hidden="true"/>候选库{savedCount?` (${savedCount})`:''}
-    </button>}
   </div>
 
   return <section className="app-page-panel mentors-page" aria-labelledby="mentors-page-title">

@@ -59,7 +59,7 @@ test('多标签导师在画像栏、速查、候选卡片与导师档案完整�
   await page.getByRole('button',{name:'候选库',exact:true}).click()
   const library=page.getByRole('region',{name:'候选库',exact:true})
   await expect(library).toBeVisible()
-  await expect(page.getByRole('heading',{name:'我的导师候选',exact:true})).toBeVisible()
+  await expect(page.getByRole('region',{name:'候选库',exact:true}).getByRole('heading',{name:'候选库',level:2})).toBeVisible()
   const tile=page.locator('.mentor-tile').filter({hasText:'付俊松'})
   await expect(tile).toHaveCount(1)
   await expect(tile.locator('.flag-chip.tone-good')).toHaveText(goodFlags)

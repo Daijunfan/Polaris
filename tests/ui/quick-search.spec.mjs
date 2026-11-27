@@ -81,7 +81,7 @@ test('推荐追问的全部收入候选库动作直接生效，无需额外模�
   await saveAll.click()
 
   await expect(page.getByRole('region',{name:'候选库',exact:true})).toBeVisible({timeout:15000})
-  await expect(page.getByRole('heading',{name:'我的导师候选',exact:true})).toBeVisible()
+  await expect(page.getByRole('region',{name:'候选库',exact:true}).getByRole('heading',{name:'候选库',level:2})).toBeVisible()
   await expect.poll(()=>page.locator('.mentor-tile').count()).toBeGreaterThanOrEqual(2)
 })
 
