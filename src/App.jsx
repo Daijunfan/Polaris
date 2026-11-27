@@ -3,7 +3,6 @@ import React, { lazy,Suspense,useCallback, useEffect, useLayoutEffect, useRef, u
 import { Bookmark, ChevronDown, Database, FileText, LoaderCircle, Lock, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, Search, SlidersHorizontal } from 'lucide-react'
 import QuickSearch from './components/QuickSearch.jsx'
 import { api, downloadFile, modelLabel, observeChat, streamChat } from './api.js'
-import Message from './components/Message.jsx'
 import { RenameConversation, Settings, ShortcutHelp, Sources, Trash, Usage, VaultUnlockDialog } from './components/Dialogs.jsx'
 import { Sidebar, Welcome, Composer } from './components/WorkspaceViews.jsx'
 import ExportMenu from './components/ExportMenu.jsx'
@@ -21,6 +20,8 @@ import './components/mobile.css'
 import './components/theme-dark.css'
 import {useWorkspace} from './workspace.jsx'
 import {useToast} from './toast.jsx'
+const loadMessage=()=>import('./components/Message.jsx')
+const Message=lazy(loadMessage)
 const WorkspaceLayer=lazy(()=>import('./components/Workbench.jsx'))
 
 export default function App() {
@@ -54,6 +55,15 @@ export default function App() {
   const searchChats = useCallback(async query=>(await api(`/chats?q=${encodeURIComponent(query)}`)).chats,[])
   useEffect(() => { initialize(); return () => {observer.current?.abort();streamAbortRef.current?.abort();cancelAnimationFrame(deltaFrame.current)} }, [])
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(() => { loadMessage().catch(() => {}) })
+      return () => window.cancelIdleCallback(id)
+    }
+    const timer = setTimeout(() => { loadMessage().catch(() => {}) }, 1200)
+    return () => clearTimeout(timer)
+  }, [])
+  useEffect(() => {
     const desktop = typeof window !== 'undefined' ? window.polarisDesktop : null
     if (!desktop) return
     const offSettings = desktop.onOpenSettings?.(() => { closeSidebar(); setModal('settings') })
@@ -77,7 +87,7 @@ export default function App() {
       if (restoreChat) {
         const saved = sessionStorage.getItem('mentor-active-chat')
         const ongoing = saved === 'new' ? null : history.chats.find(item => item.id === saved) || history.chats.find(item=>item.running)
-        if (ongoing) await selectChat(ongoing.id)
+        if (ongoing) { loadMessage().catch(() => {}); await selectChat(ongoing.id) }
       }
     } catch (e) { setError(`无法连接本机后端：${e.message}`) }
   }
@@ -204,6 +214,7 @@ export default function App() {
   const sources = useCallback(id => { setSourceId(id || null); setModal('sources') }, [])
   const isFollowing=useCallback(()=>follow.current,[])
   const selectChat=useCallback(async(id)=>{
+    loadMessage().catch(() => {})
     const token = ++view.current
     observer.current?.abort(); streamAbortRef.current?.abort(); streamAbortRef.current = null; runStartedRef.current = false; cancelPending.current = false; activeChatIdRef.current = id; sending.current = true; setBusy(false);setStopping(false);setLoadingChat(true)
     try {
@@ -317,6 +328,7 @@ export default function App() {
     const question = (value ?? text).trim()
     if (!question || sending.current || !config) return
     if (!config.configured) { editText(question); setModal('settings'); return }
+    loadMessage().catch(() => {})
     sending.current = true; setBusy(true); setError(''); editText(''); follow.current = true; cancelPending.current = false
     runStartedRef.current = false
     streamAbortRef.current?.abort()
@@ -482,7 +494,7 @@ export default function App() {
       {error && <div className="app-error" role="alert"><span>{error}</span><button onClick={() => config ? setError('') : initialize()}>{config ? '关闭' : '重试'}</button></div>}
       <div className="conversation-panel">
       <div className={`conversation-scroll${isWelcome ? ' is-empty' : ''}`} ref={scroll} role="region" aria-label="对话内容" tabIndex={0} onScroll={trackScroll} onWheel={event => scrollIntent(event.deltaY)} onTouchStart={event => { touchY.current = event.touches[0].clientY }} onTouchMove={touchScroll} onKeyDown={keyScroll}>
-        {isWelcome ? <div className="start-view"><Welcome data={data} failed={Boolean(error && !data)} mentorCount={mentorTotalCount} savedCount={savedCount} compareCount={compareCount} isMac={isMac} vaultLocked={Boolean(vaultStatus?.locked)} configured={config?.configured} onOpenSettings={() => setModal('settings')} onOpenMentors={openMentors} onOpenLibrary={openLibrary}>{composer}</Welcome></div> : <div className="messages">{chat.messages.map(m => <Message key={m.id} message={m} mentorTotal={data?.metadata?.counts?.mentors} onRetry={m===chat.messages.at(-1)&&!busy?retry:undefined} onFollowUp={m===chat.messages.at(-1)&&!busy?send:undefined} onSources={sources} isFollowing={isFollowing}/>)}{busy && chat.messages.at(-1)?.role === 'user' && <div className="connecting"><LoaderCircle className="spin" size={15}/><span>连接中…</span></div>}</div>}
+        {isWelcome ? <div className="start-view"><Welcome data={data} failed={Boolean(error && !data)} mentorCount={mentorTotalCount} savedCount={savedCount} compareCount={compareCount} isMac={isMac} vaultLocked={Boolean(vaultStatus?.locked)} configured={config?.configured} onOpenSettings={() => setModal('settings')} onOpenMentors={openMentors} onOpenLibrary={openLibrary}>{composer}</Welcome></div> : <div className="messages"><Suspense fallback={<div className="message-skeleton" aria-busy="true" aria-label="正在加载对话"><span className="skeleton-box" style={{ width: '58%', height: 18, marginBottom: 12 }} /><span className="skeleton-box" style={{ width: '92%', height: 14, marginBottom: 8 }} /><span className="skeleton-box" style={{ width: '76%', height: 14 }} /></div>}>{chat.messages.map(m => <Message key={m.id} message={m} mentorTotal={data?.metadata?.counts?.mentors} onRetry={m===chat.messages.at(-1)&&!busy?retry:undefined} onFollowUp={m===chat.messages.at(-1)&&!busy?send:undefined} onSources={sources} isFollowing={isFollowing}/>)}</Suspense>{busy && chat.messages.at(-1)?.role === 'user' && <div className="connecting"><LoaderCircle className="spin" size={15}/><span>连接中…</span></div>}</div>}
       </div>
       </div>
       {!isWelcome && composer}

@@ -9,11 +9,11 @@ import { compactNumber, messageMarkdown } from '../presentation.js'
 import WorkTrace from './WorkTrace.jsx'
 import SourceLinks from './SourceLinks.jsx'
 import Rankings from './Rankings.jsx'
-import {PolarisMark,Funnel,FollowUps} from './Polaris.jsx'
+import {AgentMark,Funnel,FollowUps} from './Polaris.jsx'
 import ExportMenu from './ExportMenu.jsx'
 import {useToast} from '../toast.jsx'
 
-export function AgentMark({ small = false }) { return <PolarisMark size={small?26:34} className={small?'small':''}/> }
+export { AgentMark }
 
 function ToolTrace({ tools, running }) {
   if (!tools?.length) return null

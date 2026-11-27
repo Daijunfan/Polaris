@@ -13,6 +13,10 @@ export function PolarisMark({size=34,className=''}){
   </span>
 }
 
+export function AgentMark({small=false}){
+  return <PolarisMark size={small?26:34} className={small?'small':''}/>
+}
+
 const datasetBase={search:'相关方向',query:'筛选',join:'关联',aggregate:'统计',visualize:'最终名单'}
 /** Funnel theatre: shows how the candidate pool narrows, built from real tool counts. */
 export function Funnel({activity,total,running}){

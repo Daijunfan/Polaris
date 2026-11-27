@@ -4,7 +4,7 @@ import { ArrowDown, ArrowRight, ArrowUp, Bookmark, ChevronRight, Coins, Keyboard
 import { compactNumber, effortLabel } from '../presentation.js'
 import { tokenNumber } from '../api.js'
 import { useTheme } from '../theme-hook.jsx'
-import { AgentMark } from './Message.jsx'
+import { AgentMark } from './Polaris.jsx'
 import SidebarPane from './SidebarPane.jsx'
 import {ProfileBar} from './ProfileBar.jsx'
 
