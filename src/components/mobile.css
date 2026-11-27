@@ -1,0 +1,84 @@
+/* Mobile touch, safe-area inset, and scrolling chip refinements.
+   Loaded after polaris.css and before theme-dark.css. */
+
+button,
+a,
+[role="button"],
+summary,
+label {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+@media (max-width: 760px) and (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .composer-area {
+    padding-bottom: calc(15px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .sidebar-pane .sidebar {
+    padding-top: calc(22px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .workbench-dialog .modal-panel {
+    padding-top: calc(16px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .expanded-chart-modal .modal-panel {
+    padding-top: calc(18px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .quick-search-modal .modal-panel {
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .dossier-modal .modal-panel {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .settings-modal .settings-content {
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .qs-hot-pills {
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    padding-right: 28px;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+
+  .qs-hot-pills::-webkit-scrollbar {
+    display: none;
+  }
+
+  .qs-hot-pills > * {
+    scroll-snap-align: start;
+  }
+
+  .workspace-lists {
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    padding-right: 28px;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+
+  .workspace-lists::-webkit-scrollbar {
+    display: none;
+  }
+
+  .workspace-lists > * {
+    scroll-snap-align: start;
+  }
+}

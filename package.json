@@ -26,6 +26,7 @@
     "test:e2e": "vite build --outDir .local/ui-test-dist --emptyOutDir && playwright test",
     "test:live": "node --env-file-if-exists=.env scripts/live-smoke.mjs",
     "package": "node scripts/package-release.mjs",
+    "docs:screenshots": "node scripts/capture-readme-screenshots.mjs",
     "launch": "node scripts/start.mjs"
   },
   "engines": {
@@ -69,7 +70,8 @@
     "docs/images/polaris-dossier.png",
     "docs/images/polaris-duel.png",
     "docs/images/polaris-mobile.png",
-    "docs/images/polaris-share-card.png"
+    "docs/images/polaris-share-card.png",
+    "docs/images/polaris-dark.png"
   ],
   "dependencies": {
     "ajv": "8.20.0",
