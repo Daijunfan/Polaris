@@ -8,6 +8,7 @@ import Dialog from './Dialog.jsx'
 import { mentorRanking, publicArtifact, sourceName } from '../../lib/presentation.js'
 import SourceLinks from './SourceLinks.jsx'
 import ExportMenu from './ExportMenu.jsx'
+import { useToast } from '../toast.jsx'
 export { default as DataTable } from './DataTable.jsx'
 
 const palette = ['#1d4b8f', '#0d9488', '#d97706', '#7c3aed', '#e11d48', '#0284c7', '#4f46e5', '#059669']
@@ -189,6 +190,7 @@ export function Chart({ artifact, svgRef, colors, expanded=false }) {
 }
 
 export default memo(function Artifact({ artifact: original, onSources }) {
+  const toast = useToast()
   const artifact = useMemo(() => publicArtifact(original), [original])
   const colors = useMemo(()=>artifact?pointColors(artifact):null,[artifact])
   const [dataView, setDataView] = useState(artifact?.type === 'table'), [expanded, setExpanded] = useState(null), svgRef = useRef(),expandedSvg=useRef()
@@ -252,13 +254,14 @@ export default memo(function Artifact({ artifact: original, onSources }) {
     style.textContent = `text{font-family:${svgFont}}.chart-axis{font-size:11px;fill:#4b5869}.chart-grid-line{stroke:#e2e8f0;stroke-dasharray:3 4}.chart-value{font-size:12px;font-weight:600;fill:#0f172a}.chart-category{font-size:13px;fill:#334155}`
     root.prepend(style)
     downloadFile(`${artifact.title}.svg`, root.outerHTML, 'image/svg+xml;charset=utf-8')
+    toast.success(`已导出 ${artifact.title}.svg`)
   }
   return <section className="artifact" data-testid="artifact">
     <div className="artifact-header"><div className="artifact-title"><span className="artifact-icon">{artifact.type === 'table' ? <Table2 size={16}/> : <ChartNoAxesCombined size={16}/>}</span><h3>{mentorRanking(artifact)?resultTitle(artifact):artifact.title}{mentorRanking(artifact)&&<small className="artifact-count">{artifact.rows.length} 位</small>}</h3></div><div className="artifact-actions">
       {artifact.type !== 'table' && <div className="view-switch" role="group" aria-label="结果视图"><button className={!dataView ? 'selected' : ''} aria-pressed={!dataView} onClick={() => setDataView(false)}>{artifact.type==='metric'?'指标':'图表'}</button><button className={dataView ? 'selected' : ''} aria-pressed={dataView} onClick={() => setDataView(true)}>数据</button></div>}
       <button className="icon-button" aria-label={`${artifact.type==='table'?'展开表格':'放大图表'} ${artifact.title}`} title={artifact.type==='table'?'展开表格':'放大图表'} onClick={() => setExpanded(dataView?'data':'chart')}><Maximize2 size={14}/></button>
-      <ExportMenu variant="icon" ariaLabel={`多格式导出 ${artifact.title}`} title="导出 Excel / PDF / Word / MD" getPayload={format => ({ kind: 'artifact', format, artifacts: [table], title: artifact.title })} />
-      <button className="icon-button" aria-label={`下载 ${artifact.title} CSV`} title="下载 CSV 数据" onClick={() => exportCSV(table)}><Download size={15}/></button>
+      <ExportMenu variant="icon" ariaLabel={`多格式导出 ${artifact.title}`} title="导出 Excel / PDF / Word / MD" getPayload={format => ({ kind: 'artifact', format, artifacts: [table], title: artifact.title })} onSuccess={({ filename }) => { if (!window.polarisDesktop?.isElectron) toast.success(`已导出 ${filename}`) }} onError={err => toast.error(err.message)} />
+      <button className="icon-button" aria-label={`下载 ${artifact.title} CSV`} title="下载 CSV 数据" onClick={() => { exportCSV(table); toast.success(`已导出 ${table.title}.csv`) }}><Download size={15}/></button>
     </div></div>
     {artifact.description && <p className="artifact-description">{artifact.description}</p>}
     {!dataView&&legend}

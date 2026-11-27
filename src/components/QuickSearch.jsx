@@ -7,14 +7,17 @@ import {usePolaris} from '../insights.jsx'
 import {useWorkspace} from '../workspace.jsx'
 import {nameVariants} from '../../lib/insights.js'
 import {MENTOR_FILTER_GROUPS,MENTOR_FILTER_MAP,computeFacetCounts,filterMentors,shortCollegeName,splitMentorColleges} from '../../lib/mentor-filters.js'
-import {formatDisciplineText} from '../presentation.js'
+import {formatDirectionLine,formatDisciplineText} from '../presentation.js'
+import {loadQuickSearchSessionFilters,saveQuickSearchSessionFilters} from '../quick-search-session.js'
+import {QuickSearchSkeleton} from './Skeleton.jsx'
 
 const PRIORITY_COLLEGES=['网络空间安全学院','计算机学院','人工智能学院','软件学院']
 const HOT_FILTER_IDS=['internship_ok','no_clock','no_paper','doctoral','dir_llm','dir_6g']
 
 export default function QuickSearch({onClose,onSuspend,onReopen,savedStateRef,onAsk,onOpenLibrary,busy=false}){
   const polaris=usePolaris(),w=useWorkspace()
-  const init=savedStateRef?.current||{}
+  const sessionInit=useMemo(()=>(savedStateRef?.current?null:loadQuickSearchSessionFilters()),[])
+  const init=savedStateRef?.current||sessionInit||{}
   const [query,setQuery]=useState(init.query||'')
   const deferredQuery=useDeferredValue(query)
   const [selectedColleges,setSelectedColleges]=useState(init.selectedColleges||[])
@@ -25,6 +28,7 @@ export default function QuickSearch({onClose,onSuspend,onReopen,savedStateRef,on
   const [limitCount,setLimitCount]=useState(init.limitCount||20)
   const inputRef=useRef(null),listRef=useRef(null),mountedRef=useRef(false)
   useEffect(()=>{inputRef.current?.focus()},[])
+  useEffect(()=>{saveQuickSearchSessionFilters({selectedColleges,selectedFilters,directionMode})},[selectedColleges,selectedFilters,directionMode])
   useLayoutEffect(()=>{
     if(!listRef.current||(!init.scrollTop&&!init.activeIndex))return
     if(init.scrollTop)listRef.current.scrollTop=init.scrollTop
@@ -50,7 +54,7 @@ export default function QuickSearch({onClose,onSuspend,onReopen,savedStateRef,on
 
   const toggleFilter=id=>setSelectedFilters(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id])
   const toggleCollege=c=>setSelectedColleges(prev=>prev.includes(c)?prev.filter(x=>x!==c):[...prev,c])
-  const clearAllFilters=()=>{setSelectedFilters([]);setSelectedColleges([]);setDirectionMode('and')}
+  const clearAllFilters=()=>{setSelectedFilters([]);setSelectedColleges([]);setDirectionMode('and');saveQuickSearchSessionFilters({selectedColleges:[],selectedFilters:[],directionMode:'and'})}
 
   const {filterCounts,collegeCounts}=useMemo(
     ()=>computeFacetCounts(allMentors,{query:deferredQuery,colleges:selectedColleges,filters:selectedFilters,directionMode,collegeList:colleges}),
@@ -269,7 +273,7 @@ export default function QuickSearch({onClose,onSuspend,onReopen,savedStateRef,on
     </div>
 
     {results[safeIndex]&&<span className="sr-only" aria-live="polite">当前选中：{results[safeIndex].name}，{results[safeIndex].college}，第 {safeIndex+1} 位，共 {totalMatches} 位</span>}
-    {polaris.loading&&!allMentors.length?<div className="quick-search-empty"><p role="status">正在加载全校导师档案…</p></div>:polaris.error&&!allMentors.length?<div className="quick-search-empty"><p role="alert">{polaris.error}</p><button type="button" className="secondary-button" onClick={polaris.reload}>重试加载</button></div>:!results.length?<div className="quick-search-empty">
+    {polaris.loading&&!allMentors.length?<QuickSearchSkeleton/>:polaris.error&&!allMentors.length?<div className="quick-search-empty"><p role="alert">{polaris.error}</p><button type="button" className="secondary-button" onClick={polaris.reload}>重试加载</button></div>:!results.length?<div className="quick-search-empty">
       <Sparkles size={24}/>
       <p>没有同时满足当前{activeFilterItems.length?` ${activeFilterItems.length} 项筛选条件`:''}{query.trim()?`${activeFilterItems.length?'与':''}关键词“${query.trim()}”`:''}的导师。</p>
       <div className="qs-empty-actions">
@@ -293,7 +297,7 @@ export default function QuickSearch({onClose,onSuspend,onReopen,savedStateRef,on
                 <Stars value={item.rating}/>
               </div>
               <FlagChips insight={item} tones={['bad','good']}/>
-              {item.directions&&<p className="qs-directions" title={formatDisciplineText(String(item.directions))}>{formatDisciplineText(String(item.directions)).replace(/\n/g,' ')}</p>}
+              {item.directions&&<p className="qs-directions" title={formatDirectionLine(String(item.directions))}>{formatDirectionLine(String(item.directions))}</p>}
             </div>
             {match&&<MatchRing match={match} size={36}/>}
           </button>

@@ -1,13 +1,13 @@
 import {APP_NAME,APP_SLOGAN,APP_TAGLINE} from '../../lib/brand.js'
 import React, { forwardRef, memo, useEffect, useState } from 'react'
-import { ArrowDown, ArrowRight, ArrowUp, Bookmark, ChevronRight, Coins, LoaderCircle, MessageSquare, Pencil, Plus, Search, Settings2, SlidersHorizontal, Square, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUp, Bookmark, ChevronRight, Coins, Keyboard, LoaderCircle, MessageSquare, Pencil, Plus, Search, Settings2, SlidersHorizontal, Square, Trash2, X } from 'lucide-react'
 import { compactNumber, effortLabel } from '../presentation.js'
 import { tokenNumber } from '../api.js'
 import { AgentMark } from './Message.jsx'
 import SidebarPane from './SidebarPane.jsx'
 import {ProfileBar} from './ProfileBar.jsx'
 
-export const Sidebar = memo(function Sidebar({ chats, chatId, usage, configured, open, collapsed, onCollapse, onClose, onNew, onSelect, onSearch, onRemove, onRename, onTrash, onSettings, onUsage, onOpenMentors, onWorkspace }) {
+export const Sidebar = memo(function Sidebar({ chats, chatId, usage, configured, open, collapsed, isMac = false, onCollapse, onClose, onNew, onSelect, onSearch, onRemove, onRename, onTrash, onSettings, onUsage, onShortcuts, onOpenMentors, onWorkspace }) {
   const [search,setSearch] = useState('')
   const [found,setFound] = useState({query:'',items:[]}),[searchError,setSearchError] = useState('')
   useEffect(()=>{
@@ -23,7 +23,7 @@ export const Sidebar = memo(function Sidebar({ chats, chatId, usage, configured,
   return <SidebarPane collapsed={collapsed} open={open} onCollapse={onCollapse}><aside className="sidebar">
     <div className="sidebar-heading"><button className="brand" onClick={start} aria-label={`${APP_NAME}首页`}><AgentMark/><strong>{APP_NAME}</strong></button><button className="icon-button sidebar-mobile-close" aria-label="关闭对话列表" onClick={onClose}><X size={18}/></button></div>
     <button className="new-chat" onClick={start}><Plus size={16}/><span>开启新对话</span></button>
-    <label className="history-search"><Search size={15}/><input type="search" aria-label="搜索对话" placeholder="搜索对话" value={search} onChange={e=>setSearch(e.target.value)}/></label>
+    <div className="history-search"><Search size={15} aria-hidden="true"/><input type="search" aria-label="搜索对话" placeholder="搜索对话" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="icon-button history-search-clear" aria-label="清空搜索" title="清空搜索" onClick={()=>setSearch('')}><X size={13}/></button>}</div>
     <div className="history-heading">历史对话</div>
     <nav className="chat-history" aria-label="历史对话">
       {!shown.length && <p className="history-empty">{searchError?'搜索暂不可用':waiting?'搜索中…':searching?'没有匹配对话':'暂无对话'}</p>}
@@ -33,7 +33,7 @@ export const Sidebar = memo(function Sidebar({ chats, chatId, usage, configured,
       {onOpenMentors&&<button className="sidebar-workspace" onClick={onOpenMentors}><Search size={15}/><span>查看导师</span><ChevronRight size={14}/></button>}
       <button className="sidebar-workspace" onClick={onWorkspace}><Bookmark size={15}/><span>候选库</span><ChevronRight size={14}/></button>
       <button className="usage-summary" onClick={onUsage} aria-label="Token 用量"><Coins size={16}/><span>Token 用量</span><strong>{compactNumber(usage?.totalTokens || 0)}</strong></button>
-      <div className="sidebar-settings-row"><button className="sidebar-setting" onClick={onSettings} disabled={!configured}><Settings2 size={16}/><span>设置</span><ChevronRight size={14}/></button><button className="icon-button" aria-label="回收站" title="回收站" onClick={onTrash}><Trash2 size={16}/></button></div>
+      <div className="sidebar-settings-row"><button className="sidebar-setting" onClick={onSettings} disabled={!configured}><Settings2 size={16}/><span>设置</span><ChevronRight size={14}/></button>{onShortcuts&&<button className="icon-button" aria-label="快捷键" title={`快捷键（${isMac?'⌘/':'Ctrl+/'} 或 ?）`} onClick={onShortcuts}><Keyboard size={16}/></button>}<button className="icon-button" aria-label="回收站" title="回收站" onClick={onTrash}><Trash2 size={16}/></button></div>
     </div>
   </aside></SidebarPane>
 })

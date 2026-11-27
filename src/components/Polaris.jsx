@@ -3,6 +3,7 @@ import {ArrowRight,Filter,ImageDown,LoaderCircle} from 'lucide-react'
 import {APP_NAME,APP_EN,STAR_PATH} from '../../lib/brand.js'
 import {usePolaris} from '../insights.jsx'
 import {useWorkspace} from '../workspace.jsx'
+import {useToast} from '../toast.jsx'
 import {profileChips} from '../../lib/profile.js'
 
 /** Brand mark: a four-point north star on a night-sky tile. */
@@ -194,7 +195,7 @@ export async function renderShareCard({title,rows,lookup,profile,match}){
 }
 
 export function ShareCardButton({artifact}){
-  const {lookup,profile,match}=usePolaris(),w=useWorkspace(),[busy,setBusy]=useState(false)
+  const {lookup,profile,match}=usePolaris(),w=useWorkspace(),toast=useToast(),[busy,setBusy]=useState(false)
   async function share(){
     setBusy(true)
     try{
@@ -202,8 +203,11 @@ export function ShareCardButton({artifact}){
       const safeTitle=String(artifact.title||'导师推荐').replace(/[\\/:*?"<>|\r\n]+/g,'_').trim().slice(0,48)||'导师推荐'
       const href=URL.createObjectURL(blob),link=document.createElement('a')
       link.href=href;link.download=`${APP_NAME}择导卡-${safeTitle}.png`;link.click();setTimeout(()=>URL.revokeObjectURL(href),1500)
+      toast.success(`已生成 ${APP_NAME}择导卡`)
     }catch(error){
-      w?.setError?.(error.message||'择导卡生成失败')
+      const msg=error.message||'择导卡生成失败'
+      toast.error(msg)
+      w?.setError?.(msg)
     }finally{setBusy(false)}
   }
   return <button className="share-card-button" onClick={share} disabled={busy} title="生成可分享的择导卡图片"><ImageDown size={14}/>{busy?'生成中…':'择导卡'}</button>

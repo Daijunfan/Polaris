@@ -1,12 +1,14 @@
-import React,{useEffect,useState} from 'react'
-import {AlertTriangle,ArrowLeft,BadgeCheck,BookOpen,Bookmark,ChevronLeft,ChevronRight,ExternalLink,FileCheck2,GraduationCap,Info,Mail,MessageCircleQuestion,PenLine,Quote,ShieldAlert,Sparkles,Star,UserRoundSearch,Users} from 'lucide-react'
+import React,{useEffect,useRef,useState} from 'react'
+import {AlertTriangle,ArrowLeft,BadgeCheck,BookOpen,Bookmark,Check,ChevronLeft,ChevronRight,Copy,ExternalLink,FileCheck2,GraduationCap,Info,Mail,MessageCircleQuestion,PenLine,Quote,ShieldAlert,Sparkles,Star,UserRoundSearch,Users} from 'lucide-react'
 import {fingerprintAxes} from '../../lib/insights.js'
 import {usePolaris} from '../insights.jsx'
 import {useWorkspace} from '../workspace.jsx'
+import {useToast} from '../toast.jsx'
 import {api} from '../api.js'
 import {display,formatAcademicSummary,formatDisciplineText} from '../presentation.js'
 import Dialog from './Dialog.jsx'
 import ExportMenu from './ExportMenu.jsx'
+import {DossierDetailSkeleton} from './Skeleton.jsx'
 
 const toneIcon={good:BadgeCheck,bad:AlertTriangle,note:Info}
 const SHORT_AXIS={reputation:'口碑',freedom:'自由',internship:'实习',funding:'经费',guidance:'指导',research:'科研'}
@@ -62,10 +64,24 @@ function splitDirectionTags(str){
 }
 
 export function MentorDossier({onAsk,busy}){
-  const polaris=usePolaris(),w=useWorkspace(),target=polaris.dossier
+  const polaris=usePolaris(),w=useWorkspace(),toast=useToast(),target=polaris.dossier
   const insight=target?polaris.lookup(target):null
-  const [detail,setDetail]=useState(null),[axis,setAxis]=useState(null)
-  useEffect(()=>{setDetail(null);setAxis(null);if(!insight?.key)return;let current=true;api('/workbench/mentors/'+insight.key).then(row=>{if(current)setDetail(row)}).catch(()=>{});return()=>{current=false}},[insight?.key])
+  const [detail,setDetail]=useState(null),[detailError,setDetailError]=useState(''),[axis,setAxis]=useState(null),[emailCopied,setEmailCopied]=useState(false)
+  const emailTimer=useRef(null)
+  useEffect(()=>()=>clearTimeout(emailTimer.current),[])
+  useEffect(()=>{setDetail(null);setDetailError('');setAxis(null);setEmailCopied(false);if(!insight?.key)return;let current=true;api('/workbench/mentors/'+insight.key).then(row=>{if(current)setDetail(row)}).catch(err=>{if(current)setDetailError(err?.message||'档案详情加载失败')});return()=>{current=false}},[insight?.key])
+  async function copyEmail(){
+    if(!insight?.email)return
+    try{
+      await navigator.clipboard.writeText(insight.email)
+      setEmailCopied(true)
+      clearTimeout(emailTimer.current)
+      emailTimer.current=setTimeout(()=>setEmailCopied(false),1800)
+      toast.success('邮箱已复制')
+    }catch{
+      toast.error('复制邮箱失败，请手动复制')
+    }
+  }
   if(!target)return null
   const close=polaris.closeMentor
   const backLabel=polaris.previousDossier?`返回${polaris.previousDossier.name}`:polaris.dossierOrigin?.label||(w?.view?'返回候选库':'返回对话')
@@ -156,7 +172,7 @@ export function MentorDossier({onAsk,busy}){
             <div className="dossier-dir-tags">{directionTags.map(tag=><span key={tag} className="dossier-dir-tag">{tag}</span>)}</div>
           </div>}
           {(insight.email||insight.homepage)&&<div className="dossier-contact-links">
-            {insight.email&&<a href={'mailto:'+insight.email} className="dossier-link-pill"><Mail size={12} aria-hidden="true"/>{insight.email}</a>}
+            {insight.email&&<span className="dossier-email-group"><a href={'mailto:'+insight.email} className="dossier-link-pill"><Mail size={12} aria-hidden="true"/>{insight.email}</a><button type="button" className={'dossier-copy-email'+(emailCopied?' is-copied':'')} aria-label="复制邮箱" title={`复制邮箱 ${insight.email}`} onClick={copyEmail}>{emailCopied?<Check size={12} aria-hidden="true"/>:<Copy size={12} aria-hidden="true"/>}</button></span>}
             {insight.homepage&&<a href={insight.homepage} target="_blank" rel="noopener noreferrer" className="dossier-link-pill"><ExternalLink size={12} aria-hidden="true"/>官网主页</a>}
           </div>}
         </div>}
@@ -230,6 +246,8 @@ export function MentorDossier({onAsk,busy}){
         <button disabled={busy} onClick={()=>ask(`帮我给${who}写一封套磁邮件，结合他的研究方向和我的画像，未提供的个人信息留空。`)}><PenLine size={15}/>写套磁信</button>
       </div>}
 
+      {insight.key&&!detail&&!detailError&&<DossierDetailSkeleton/>}
+      {detailError&&<p className="dossier-detail-error" role="status">{detailError}</p>}
       {facts.length>0&&<details className="dossier-facts" open={officialOnly&&!officialCards.length?true:undefined}><summary>查看原始档案字段与核验来源（{detail?.sources?.length||insight.evidence.sources} 项来源）</summary><dl>{facts.map(field=><div key={field.key}><dt>{field.label}</dt><dd>{formatFactValue(field)}</dd></div>)}</dl>{detail.sources?.length>0&&<p className="dossier-sources">来源：{detail.sources.map(source=>source.url?<a key={source.id} href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a>:<span key={source.id}>{source.title}</span>)}</p>}</details>}
     </div>
   </Dialog>

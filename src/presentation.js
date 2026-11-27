@@ -92,6 +92,17 @@ export function formatAcademicSummary(value, title = '') {
   return text
 }
 
+export function formatDirectionLine(value) {
+  const formatted = formatDisciplineText(value)
+  if (!formatted) return ''
+  return formatted
+    .replace(/\r?\n+/g, ' ')
+    .replace(/\s*&\s*/g, ' / ')
+    .replace(/\s*[,，;；]+\s*/g, '、')
+    .replace(/、{2,}/g, '、')
+    .replace(/^[、\s]+|[、\s]+$/g, '')
+}
+
 export function formatTableField(columnKey, rawText, mentorTitle = '') {
   if (['doctoral_evidence', 'profile_evidence', 'admissions', 'directions', 'personal_directions', 'research_areas', 'direction_summary'].includes(columnKey)) {
     return formatDisciplineText(rawText)

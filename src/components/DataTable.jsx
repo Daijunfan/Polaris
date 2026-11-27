@@ -8,6 +8,7 @@ import Dialog from './Dialog.jsx'
 import {usePolaris} from '../insights.jsx'
 import {FlagChips,MatchRing,DuelPanel} from './MentorInsight.jsx'
 import ExportMenu from './ExportMenu.jsx'
+import { useToast } from '../toast.jsx'
 import {IdCard} from 'lucide-react'
 
 const factLabels={management:'管理',internship:'实习',graduation:'论文与毕业',stipend_text:'劳务补助',personal_directions:'个人方向',directions:'团队方向',mentor_note:'个人情况',matched_topics:'匹配方向',topic_evidence:'相关依据',academic_summary:'学术概览',enrollment_signal:'生源选择'}
@@ -47,7 +48,7 @@ function TextCell({ value, content, preview=value }) {
 }
 
 export default function DataTable({ rows, columns, pageSize = 8, renderCell, caption, layout = 'auto',purpose }) {
-  const workspace=useWorkspace(),polaris=usePolaris()
+  const workspace=useWorkspace(),polaris=usePolaris(),toast=useToast()
   const [page, setPage] = useState(0), [sort, setSort] = useState(null), [width, setWidth] = useState(0), [chosen, setChosen] = useState(null)
   const [query,setQuery] = useState(''), [size,setSize] = useState(pageSize)
   const [selected,setSelected] = useState([]),[compareOpen,setCompareOpen] = useState(false)
@@ -175,6 +176,6 @@ export default function DataTable({ rows, columns, pageSize = 8, renderCell, cap
       </table>
     </div>}
     <div className="table-footer"><span>{query?`${filtered.length} / ${rows.length}`:rows.length} 条记录{mode==='table'&&minimum>width ? ' · 可展开查看完整表格' : ''}</span><div className="table-pagination">{rows.length>pageSize&&<label className="table-page-size"><span className="sr-only">每页记录数</span><select aria-label="每页记录数" value={size} onChange={event=>{setSize(Number(event.target.value));setPage(0)}}>{[...new Set([pageSize,25,50,rows.length])].filter(value=>value<=rows.length||value===pageSize).sort((a,b)=>a-b).map(value=><option key={value} value={value}>{value===rows.length?'全部':`${value} 条 / 页`}</option>)}</select></label>}{pages>1&&<><span>{current*size+1}–{Math.min((current+1)*size,filtered.length)} / {filtered.length}</span><button aria-label="上一页" disabled={current===0} onClick={()=>setPage(current-1)}><ChevronLeft size={16}/></button><button aria-label="下一页" disabled={current===pages-1} onClick={()=>setPage(current+1)}><ChevronRight size={16}/></button></>}</div></div>
-    {compareOpen&&<Dialog title="导师对比" className="expanded-table-modal comparison-modal" onClose={()=>setCompareOpen(false)}><div className="expanded-chart-toolbar"><span>{selectedRows.length} 位导师</span><div className="artifact-actions"><ExportMenu variant="compact" label="导出对比报告" ariaLabel="多格式导出导师对比" getPayload={format=>({kind:'comparison',format,mentors:selectedRows.map(mentorSelector),title:'所选导师对比分析报告'})} onSuccess={({filename})=>workspace?.setMessage?.(`已导出 ${filename}`)} onError={err=>workspace?.fail?.(err)} /><button className="text-button" onClick={()=>downloadFile('所选导师对比.csv',csvText({rows:selectedRows,columns:columns.filter(column=>column.key!==ordinal?.key)}),'text/csv;charset=utf-8')}><Download size={14}/>导出对比 CSV</button></div></div><DataTable rows={selectedRows} columns={columns.filter(column=>column.key!==ordinal?.key)} caption="所选导师对比" layout="comparison" pageSize={8}/></Dialog>}
+    {compareOpen&&<Dialog title="导师对比" className="expanded-table-modal comparison-modal" onClose={()=>setCompareOpen(false)}><div className="expanded-chart-toolbar"><span>{selectedRows.length} 位导师</span><div className="artifact-actions"><ExportMenu variant="compact" label="导出对比报告" ariaLabel="多格式导出导师对比" getPayload={format=>({kind:'comparison',format,mentors:selectedRows.map(mentorSelector),title:'所选导师对比分析报告'})} onSuccess={({filename})=>toast.success(`已导出 ${filename}`)} onError={err=>toast.error(err.message)} /><button className="text-button" onClick={()=>{downloadFile('所选导师对比.csv',csvText({rows:selectedRows,columns:columns.filter(column=>column.key!==ordinal?.key)}),'text/csv;charset=utf-8');toast.success('已导出所选导师对比.csv')}}><Download size={14}/>导出对比 CSV</button></div></div><DataTable rows={selectedRows} columns={columns.filter(column=>column.key!==ordinal?.key)} caption="所选导师对比" layout="comparison" pageSize={8}/></Dialog>}
   </div>
 }

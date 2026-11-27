@@ -11,6 +11,7 @@ import SourceLinks from './SourceLinks.jsx'
 import Rankings from './Rankings.jsx'
 import {PolarisMark,Funnel,FollowUps} from './Polaris.jsx'
 import ExportMenu from './ExportMenu.jsx'
+import {useToast} from '../toast.jsx'
 
 export function AgentMark({ small = false }) { return <PolarisMark size={small?26:34} className={small?'small':''}/> }
 
@@ -23,6 +24,7 @@ function ToolTrace({ tools, running }) {
 }
 
 export default memo(function Message({ message, onSources,isFollowing,onRetry,onFollowUp,mentorTotal }) {
+  const toast = useToast()
   const [copyState, setCopyState] = useState('idle'),[fileError,setFileError]=useState('')
   const copyTimer = useRef(null)
   useEffect(() => () => clearTimeout(copyTimer.current), [])
@@ -34,7 +36,7 @@ export default memo(function Message({ message, onSources,isFollowing,onRetry,on
   const phase=message.progress?.includes('修正')?'修正中':message.progress?.includes('核对')?'核对中':message.progress?.includes('压缩')?'整理上下文':message.tools?.some(tool=>tool.status==='running')?'查阅资料':'生成中'
   async function copy() {
     clearTimeout(copyTimer.current)
-    try { await navigator.clipboard.writeText(messageMarkdown(message)); setCopyState('copied'); copyTimer.current = setTimeout(() => setCopyState('idle'), 1800) }
+    try { await navigator.clipboard.writeText(messageMarkdown(message)); setCopyState('copied'); toast.success('已复制回答内容'); copyTimer.current = setTimeout(() => setCopyState('idle'), 1800) }
     catch { setCopyState('error') }
   }
   return <article className="message assistant-message" data-testid="assistant-message">
@@ -49,7 +51,7 @@ export default memo(function Message({ message, onSources,isFollowing,onRetry,on
       {running && !message.content && (!message.activity?.length ? <div className="thinking-dots" aria-label="生成中"><span/><span/><span/></div> : <div className="streaming-shimmer" role="status" aria-label="正在生成回答"><span className="streaming-shimmer-label">{(message.progress?.includes('输出') || message.progress === '生成回答') ? '正在组织文字结论…' : '正在检索并整理依据…'}</span><div className="streaming-shimmer-lines" aria-hidden="true"><span/><span/><span/></div></div>)}
       {message.error && <div className={`message-error ${message.status === 'canceled' ? 'canceled' : ''}`}>{message.status === 'canceled' ? <CircleStop size={15}/> : <AlertCircle size={15}/>}<span>{message.error}</span>{onRetry&&<button className="retry-answer" onClick={onRetry}>重试</button>}</div>}
       {!running&&message.status==='complete'&&onFollowUp&&<FollowUps message={message} rankings={rankings} onFollowUp={onFollowUp}/>}
-      {!running && <div className="message-bottom"><div className="message-sources"><SourceLinks sources={additionalSources} onSources={onSources}/></div><div className="message-meta">{message.usage?.requests > 0 && <span title={`合计 ${tokenNumber(message.usage.totalTokens)} Token · 输入 ${tokenNumber(message.usage.inputTokens)} · 输出 ${tokenNumber(message.usage.outputTokens)} · ${message.usage.requests} 次模型请求`}>{compactNumber(message.usage.totalTokens)} tokens{message.usage.unreportedRequests > 0 ? ' + 未计量请求' : ''}</span>}{(message.content||message.artifacts?.length>0) && <ExportMenu variant="icon" ariaLabel="导出本条回答" title="导出本条回答（Excel / PDF / Word / MD）" getPayload={format => ({ kind: 'chat', format, chat: { title: '北极星问答结果', messages: [message] }, messageId: message.id })} />}{(message.content||message.artifacts?.length>0) && <button className={`icon-button${copyState==='copied'?' is-copied':''}`} aria-label="复制回答" title="复制回答" onClick={copy}>{copyState==='copied' ? <><Check size={14}/><span className="copy-pill" aria-hidden="true">已复制</span></> : <Copy size={14}/>}</button>}{copyState==='copied'&&<span className="sr-only" role="status">回答已复制</span>}{message.status==='complete'&&onRetry&&<button className="icon-button" aria-label="重新生成" title="重新生成" onClick={onRetry}><RefreshCw size={14}/></button>}</div></div>}
+      {!running && <div className="message-bottom"><div className="message-sources"><SourceLinks sources={additionalSources} onSources={onSources}/></div><div className="message-meta">{message.usage?.requests > 0 && <span title={`合计 ${tokenNumber(message.usage.totalTokens)} Token · 输入 ${tokenNumber(message.usage.inputTokens)} · 输出 ${tokenNumber(message.usage.outputTokens)} · ${message.usage.requests} 次模型请求`}>{compactNumber(message.usage.totalTokens)} tokens{message.usage.unreportedRequests > 0 ? ' + 未计量请求' : ''}</span>}{(message.content||message.artifacts?.length>0) && <ExportMenu variant="icon" ariaLabel="导出本条回答" title="导出本条回答（Excel / PDF / Word / MD）" getPayload={format => ({ kind: 'chat', format, chat: { title: '北极星问答结果', messages: [message] }, messageId: message.id })} onSuccess={({ filename }) => { if (!window.polarisDesktop?.isElectron) toast.success(`已导出 ${filename}`) }} onError={err => toast.error(err.message)} />}{(message.content||message.artifacts?.length>0) && <button className={`icon-button${copyState==='copied'?' is-copied':''}`} aria-label="复制回答" title="复制回答" onClick={copy}>{copyState==='copied' ? <><Check size={14}/><span className="copy-pill" aria-hidden="true">已复制</span></> : <Copy size={14}/>}</button>}{copyState==='copied'&&<span className="sr-only" role="status">回答已复制</span>}{message.status==='complete'&&onRetry&&<button className="icon-button" aria-label="重新生成" title="重新生成" onClick={onRetry}><RefreshCw size={14}/></button>}</div></div>}
       {copyState==='error'&&<p className="copy-feedback" role="status">复制未成功，可在右上角导出对话。</p>}
     </div>
   </article>

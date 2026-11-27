@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, ExternalLink, Eye, EyeOff, KeyRound, Link2, LoaderCircle, Lock, Search, ShieldAlert, SlidersHorizontal } from 'lucide-react'
+import { Check, ChevronDown, ExternalLink, Eye, EyeOff, KeyRound, Keyboard, Link2, LoaderCircle, Lock, Search, ShieldAlert, SlidersHorizontal } from 'lucide-react'
 import { api, modelLabel, tokenNumber } from '../api.js'
 import { compactNumber, effortLabel } from '../presentation.js'
 import Dialog from './Dialog.jsx'
@@ -284,4 +284,67 @@ export function VaultUnlockDialog({ status, onUnlocked, onClose }) {
       </div>
     </form>
   </Dialog>
+}
+
+export function ShortcutHelp({ isMac = false, onClose }) {
+  const mod = isMac ? '⌘' : 'Ctrl'
+  const groups = [
+    {
+      title: '全局导航',
+      items: [
+        [[mod, 'K'], '打开或关闭查看导师速查'],
+        [['/'], '聚焦底部提问输入框'],
+        [[mod, '/'], '打开或关闭快捷键说明'],
+        [['?'], '快速查看快捷键说明（非输入状态）'],
+        [['Esc'], '关闭当前弹窗、导出菜单或侧栏'],
+      ],
+    },
+    {
+      title: '对话与提问',
+      items: [
+        [['Enter'], '发送问题'],
+        [['Shift', 'Enter'], '在输入框中换行'],
+        [['End'], '浏览长回答时跳回底部继续跟随'],
+      ],
+    },
+    {
+      title: '查看导师与档案',
+      items: [
+        [['↑', '↓'], '在速查结果列表中上下选择'],
+        [['Enter'], '打开当前高亮导师的完整档案'],
+        [['Shift', 'Enter'], '直接向北极星提问当前导师'],
+        [['←', '→'], '图表数据点与侧栏宽度键盘调节'],
+      ],
+    },
+  ]
+  return (
+    <Dialog title="键盘快捷键" className="shortcuts-modal" onClose={onClose}>
+      <p className="modal-intro">
+        <Keyboard size={14} className="shortcuts-intro-icon" aria-hidden="true" />
+        使用以下快捷键在对话、全校导师速查与图表中高效切换。
+      </p>
+      <div className="shortcut-groups">
+        {groups.map(group => (
+          <section className="shortcut-group" key={group.title}>
+            <h3>{group.title}</h3>
+            <ul>
+              {group.items.map(([keys, desc]) => (
+                <li key={desc}>
+                  <span>{desc}</span>
+                  <span className="shortcut-keys" aria-label={keys.join(' 加 ')}>
+                    {keys.map((k, idx) => (
+                      <React.Fragment key={`${k}-${idx}`}>
+                        {idx > 0 && <small aria-hidden="true">+</small>}
+                        <kbd>{k}</kbd>
+                      </React.Fragment>
+                    ))}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </Dialog>
+  )
 }
